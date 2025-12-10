@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"github.com/Kousuke-irie/hackathon-backend/database"
 	"github.com/Kousuke-irie/hackathon-backend/models"
+	"github.com/gin-gonic/gin"
 )
 
 // GetCommentsHandler 商品のコメント一覧を取得

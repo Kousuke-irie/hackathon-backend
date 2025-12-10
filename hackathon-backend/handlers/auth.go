@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"github.com/Kousuke-irie/hackathon-backend/database"
 	"github.com/Kousuke-irie/hackathon-backend/firebase"
 	"github.com/Kousuke-irie/hackathon-backend/models"
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm" // gorm.ErrRecordNotFound を使うために必要
 )
 
