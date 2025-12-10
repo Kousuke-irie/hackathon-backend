@@ -1,0 +1,70 @@
+package handlers
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/yourname/fleamarket-backend/database"
+	"github.com/yourname/fleamarket-backend/models"
+)
+
+// GetSwipeItemsHandler まだスワイプしていない商品を取得
+func GetSwipeItemsHandler(c *gin.Context) {
+	// 1. ユーザー認証 (本来はミドルウェアで行いますが、簡易的にここで取得)
+	// Authorizationヘッダーからトークンを取得してユーザーを特定する処理が必要ですが、
+	// 今回は簡単にするため、クエリパラメータ ?user_id=1 のようにIDをもらうか、
+	// 前回のログイン実装と同様にトークン解析を入れるのが正解です。
+	// ★ハッカソン仕様として、リクエストヘッダーの "X-User-ID" から簡易的にIDを取ることにします。
+	userID := c.GetHeader("X-User-ID")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User ID header is required"})
+		return
+	}
+
+	var items []models.Item
+	db := database.DBClient
+
+	// 2. 「自分がまだLikeもNopeもしていない」かつ「販売中」の商品を取得
+	// SQL: SELECT * FROM items WHERE id NOT IN (SELECT item_id FROM likes WHERE user_id = ?) AND status = 'ON_SALE'
+
+	subQuery := db.Table("likes").Select("item_id").Where("user_id = ?", userID)
+
+	if err := db.Where("id NOT IN (?)", subQuery).
+		Where("status = ?", "ON_SALE").
+		Where("seller_id != ?", userID).
+		Find(&items).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch items"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+// RecordSwipeRequest スワイプ記録用のリクエストボディ
+type RecordSwipeRequest struct {
+	UserID   uint64 `json:"user_id"`
+	ItemID   uint64 `json:"item_id"`
+	Reaction string `json:"reaction"` // "LIKE" or "NOPE"
+}
+
+// RecordSwipeHandler スワイプ結果(Like/Nope)を保存
+func RecordSwipeHandler(c *gin.Context) {
+	var req RecordSwipeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	newLike := models.Like{
+		UserID:   req.UserID,
+		ItemID:   req.ItemID,
+		Reaction: req.Reaction,
+	}
+
+	if err := database.DBClient.Create(&newLike).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to record swipe"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Swipe recorded"})
+}
