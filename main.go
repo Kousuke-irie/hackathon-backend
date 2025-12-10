@@ -26,7 +26,7 @@ func main() {
 
 	// CORS設定
 	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://localhost:5173"}
+	config.AllowOrigins = []string{"https://hackathon-frontend-oawlgokuu-kousuke-iries-projects.vercel.app"}
 	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
 	config.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-User-ID"}
 	config.AllowCredentials = true
