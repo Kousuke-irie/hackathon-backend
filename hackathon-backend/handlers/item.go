@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Kousuke-irie/hackathon-backend/database"
+	"github.com/Kousuke-irie/hackathon-backend/gemini"
+	"github.com/Kousuke-irie/hackathon-backend/models"
 	"github.com/gin-gonic/gin"
-	"github.com/yourname/fleamarket-backend/database"
-	"github.com/yourname/fleamarket-backend/gemini"
-	"github.com/yourname/fleamarket-backend/models"
 )
 
 // CreateItemHandler 商品出品API

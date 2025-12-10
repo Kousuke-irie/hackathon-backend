@@ -3,9 +3,9 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/Kousuke-irie/hackathon-backend/database"
+	"github.com/Kousuke-irie/hackathon-backend/models"
 	"github.com/gin-gonic/gin"
-	"github.com/yourname/fleamarket-backend/database"
-	"github.com/yourname/fleamarket-backend/models"
 )
 
 // GetCategoriesHandler カテゴリ一覧を取得

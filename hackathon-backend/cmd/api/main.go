@@ -7,9 +7,9 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
-	"github.com/yourname/fleamarket-backend/database"
-	"github.com/yourname/fleamarket-backend/firebase"
-	"github.com/yourname/fleamarket-backend/routes"
+	"github.com/Kousuke-irie/hackathon-backend/database"
+	"github.com/Kousuke-irie/hackathon-backend/firebase"
+	"github.com/Kousuke-irie/hackathon-backend/routes"
 )
 
 func main() {

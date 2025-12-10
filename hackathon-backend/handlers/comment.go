@@ -5,8 +5,8 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yourname/fleamarket-backend/database"
-	"github.com/yourname/fleamarket-backend/models"
+	"github.com/Kousuke-irie/hackathon-backend/database"
+	"github.com/Kousuke-irie/hackathon-backend/models"
 )
 
 // GetCommentsHandler 商品のコメント一覧を取得

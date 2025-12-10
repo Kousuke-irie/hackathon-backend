@@ -1,8 +1,8 @@
 package routes
 
 import (
+	"github.com/Kousuke-irie/hackathon-backend/handlers"
 	"github.com/gin-gonic/gin"
-	"github.com/yourname/fleamarket-backend/handlers"
 )
 
 func SetupRoutes(r *gin.Engine) {

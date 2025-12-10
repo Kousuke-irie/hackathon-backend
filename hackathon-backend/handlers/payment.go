@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/Kousuke-irie/hackathon-backend/database"
+	"github.com/Kousuke-irie/hackathon-backend/models"
 	"github.com/gin-gonic/gin"
 	"github.com/stripe/stripe-go/v79"
 	"github.com/stripe/stripe-go/v79/paymentintent"
-	"github.com/yourname/fleamarket-backend/database"
-	"github.com/yourname/fleamarket-backend/models"
 )
 
 // CreatePaymentIntentHandler 支払い情報の作成

@@ -7,9 +7,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yourname/fleamarket-backend/database"
-	"github.com/yourname/fleamarket-backend/firebase"
-	"github.com/yourname/fleamarket-backend/models"
+	"github.com/Kousuke-irie/hackathon-backend/database"
+	"github.com/Kousuke-irie/hackathon-backend/firebase"
+	"github.com/Kousuke-irie/hackathon-backend/models"
 	"gorm.io/gorm" // gorm.ErrRecordNotFound を使うために必要
 )
 

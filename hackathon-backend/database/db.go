@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/yourname/fleamarket-backend/models"
+	"github.com/Kousuke-irie/hackathon-backend/models"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )

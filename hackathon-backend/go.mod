@@ -1,4 +1,4 @@
-module github.com/yourname/fleamarket-backend
+module github.com/Kousuke-irie/hackathon-backend
 
 go 1.24.0
 
