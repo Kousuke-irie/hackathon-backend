@@ -27,5 +27,9 @@ WORKDIR /app
 # ステージ1でビルドしたバイナリをコピー
 COPY --from=builder /usr/local/bin/main .
 
+COPY --from=builder /app/serviceAccountKey.json .
+
+RUN mkdir uploads
+
 # 実行可能なエントリポイント
 CMD ["./main"]
