@@ -3,6 +3,7 @@ package database
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/Kousuke-irie/hackathon-backend/models"
@@ -33,7 +34,25 @@ func InitDB() error {
 	// ▼▼▼ 【修正点1】マイグレーション前に外部キーチェックを無効化し、エラーを回避 ▼▼▼
 	DBClient.Exec("SET FOREIGN_KEY_CHECKS = 0;")
 
-	DBClient.Exec("DROP INDEX `uix_transactions_item_id` ON `transactions`;")
+	err = DBClient.Migrator().DropTable(
+		&models.Review{},
+		&models.Transaction{},
+		&models.Like{},
+		&models.Comment{},
+		&models.CommunityPost{},
+		&models.Community{},
+		&models.Item{},
+		&models.User{},
+		&models.Category{},
+		&models.ProductCondition{},
+	)
+
+	if err != nil {
+		// ここでエラーハンドリングを行います
+		log.Printf("テーブルの削除中にエラーが発生しました: %v\n", err)
+		// 必要に応じて、エラーを呼び出し元に返すか、アプリケーションを終了するなど、適切な対応を行います
+		return err
+	}
 
 	// マイグレーション
 	err = DBClient.AutoMigrate(
