@@ -6,20 +6,18 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-
-	"github.com/Kousuke-irie/hackathon-backend/database"
-	"github.com/Kousuke-irie/hackathon-backend/firebase"
-	"github.com/Kousuke-irie/hackathon-backend/routes"
 )
 
 func main() {
-	// 1. 接続と初期化
-	if err := database.InitDB(); err != nil {
-		log.Fatalf("Database initialization failed: %v", err)
-	}
-	if err := firebase.InitFirebase(); err != nil {
-		log.Fatalf("Firebase initialization failed: %v", err)
-	}
+	/*
+		// 1. 接続と初期化
+		if err := database.InitDB(); err != nil {
+			log.Fatalf("Database initialization failed: %v", err)
+		}
+		if err := firebase.InitFirebase(); err != nil {
+			log.Fatalf("Firebase initialization failed: %v", err)
+		}
+	*/
 
 	// 2. ルーティング設定
 	r := gin.Default()
@@ -43,12 +41,13 @@ func main() {
 
 	// 疎通確認用
 	r.GET("/", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "API is running"})
+		//c.JSON(http.StatusOK, gin.H{"message": "API is running"})
+		c.JSON(http.StatusOK, gin.H{"message": "Connectivity Test Succeeded"})
 	})
 
-	routes.SetupRoutes(r)
+	//routes.SetupRoutes(r)
 
-	log.Println("Server starting on :8080")
+	log.Println("Server starting on :8082")
 	if err := r.Run(":8082"); err != nil { // 👈 エラーチェックを追加
 		log.Fatalf("Server failed to run: %v", err)
 	}
