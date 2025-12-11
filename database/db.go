@@ -30,12 +30,19 @@ func InitDB() error {
 		return fmt.Errorf("failed to connect database: %w", err)
 	}
 
+	// ▼▼▼ 【修正点1】マイグレーション前に外部キーチェックを無効化し、エラーを回避 ▼▼▼
+	DBClient.Exec("SET FOREIGN_KEY_CHECKS = 0;")
+
 	// マイグレーション
 	err = DBClient.AutoMigrate(
 		&models.User{}, &models.Item{}, &models.Transaction{},
 		&models.Like{}, &models.Comment{}, &models.Community{}, &models.CommunityPost{},
 		&models.Category{}, &models.ProductCondition{}, &models.Review{},
 	)
+
+	// ▼▼▼ 【修正点2】マイグレーション後に外部キーチェックを有効に戻す ▼▼▼
+	DBClient.Exec("SET FOREIGN_KEY_CHECKS = 1;")
+
 	if err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
