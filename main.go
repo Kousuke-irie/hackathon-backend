@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/Kousuke-irie/hackathon-backend/database"
 	"github.com/Kousuke-irie/hackathon-backend/firebase"
@@ -49,8 +50,13 @@ func main() {
 
 	routes.SetupRoutes(r)
 
-	log.Println("Server starting on :8082")
-	if err := r.Run(":8082"); err != nil { // 👈 エラーチェックを追加
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8082"
+	}
+
+	log.Println("Server starting on " + port)
+	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Server failed to run: %v", err)
 	}
 }

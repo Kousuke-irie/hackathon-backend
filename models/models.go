@@ -40,7 +40,7 @@ type Item struct {
 // Transaction 取引
 type Transaction struct {
 	ID              uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	ItemID          uint64    `gorm:"not null;uniqueIndex" json:"item_id"`
+	ItemID          uint64    `gorm:"not null;index" json:"item_id"`
 	BuyerID         uint64    `gorm:"not null;index" json:"buyer_id"`
 	SellerID        uint64    `gorm:"not null" json:"seller_id"`
 	PriceSnapshot   int       `gorm:"not null" json:"price_snapshot"`
