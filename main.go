@@ -49,7 +49,7 @@ func main() {
 	routes.SetupRoutes(r)
 
 	log.Println("Server starting on :8080")
-	if err := r.Run(":8080"); err != nil { // 👈 エラーチェックを追加
+	if err := r.Run(":8082"); err != nil { // 👈 エラーチェックを追加
 		log.Fatalf("Server failed to run: %v", err)
 	}
 }

@@ -19,8 +19,8 @@ RUN go build -ldflags '-s -w' -o /usr/local/bin/main .
 
 FROM alpine:latest
 # Cloud Runがデフォルトで使用するポート
-ENV PORT 8080 
-EXPOSE 8080
+ENV PORT 8082
+EXPOSE 8082
 
 WORKDIR /app
 
