@@ -32,7 +32,7 @@ func main() {
 	}
 	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
 	config.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-User-ID"}
-	config.AllowCredentials = true
+	config.AllowCredentials = false
 	r.Use(cors.New(config))
 
 	// 静的ファイル（画像）の配信
@@ -41,6 +41,11 @@ func main() {
 	// 疎通確認用
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "API is running"})
+	})
+
+	// 全てのパスに対して OPTIONS を許可するハンドラを追加 (Preflight Request対応)
+	r.OPTIONS("/*path", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
 	})
 
 	routes.SetupRoutes(r)
