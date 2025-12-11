@@ -33,6 +33,8 @@ func InitDB() error {
 	// ▼▼▼ 【修正点1】マイグレーション前に外部キーチェックを無効化し、エラーを回避 ▼▼▼
 	DBClient.Exec("SET FOREIGN_KEY_CHECKS = 0;")
 
+	DBClient.Exec("DROP INDEX `uix_transactions_item_id` ON `transactions`;")
+
 	// マイグレーション
 	err = DBClient.AutoMigrate(
 		&models.User{}, &models.Item{}, &models.Transaction{},
