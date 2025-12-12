@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/Kousuke-irie/hackathon-backend/database"
+	"github.com/Kousuke-irie/hackathon-backend/gcs"
 	"github.com/Kousuke-irie/hackathon-backend/gemini"
 	"github.com/Kousuke-irie/hackathon-backend/models"
 	"github.com/gin-gonic/gin"
@@ -59,14 +61,13 @@ func CreateItemHandler(c *gin.Context) {
 
 	imageURL := ""
 	if file != nil { // fileが存在する場合のみ保存
-		filename := filepath.Base(file.Filename)
-		savePath := filepath.Join("uploads", filename)
-
-		if err := c.SaveUploadedFile(file, savePath); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save image"})
+		ctx := c.Request.Context()
+		uploadedURL, err := gcs.UploadFile(ctx, file, sellerID) // ユーザーIDは認証から取得
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload image"})
 			return
 		}
-		imageURL = fmt.Sprintf("http://localhost:8081/uploads/%s", filename)
+		imageURL = uploadedURL
 	} else {
 		// 画像がない場合、プレースホルダーURLや空文字列を使用
 		imageURL = "https://placehold.jp/100x100.png"
@@ -107,9 +108,11 @@ func AnalyzeItemHandler(c *gin.Context) {
 	savePath := filepath.Join("uploads", "temp_"+filename) // 一時ファイルとして保存
 
 	if err := c.SaveUploadedFile(file, savePath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save image"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save temporary image file"})
 		return
 	}
+
+	defer os.Remove(savePath)
 
 	var allCategories []models.Category
 	if err := database.DBClient.Where("parent_id IS NOT NULL").Find(&allCategories).Error; err != nil {
@@ -307,12 +310,14 @@ func UpdateItemHandler(c *gin.Context) {
 	imageURL := item.ImageURL // 既存のURLをデフォルトとして保持
 
 	if file != nil {
-		// 新しい画像がある場合のみ、保存処理を実行
-		filename := filepath.Base(file.Filename)
-		savePath := filepath.Join("uploads", filename)
-		if err := c.SaveUploadedFile(file, savePath); err == nil {
-			imageURL = fmt.Sprintf("http://localhost:8081/uploads/%s", filename)
+		ctx := c.Request.Context()
+		// 💡 sellerID は item から取得
+		uploadedURL, err := gcs.UploadFile(ctx, file, item.SellerID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload new image"})
+			return
 		}
+		imageURL = uploadedURL
 	}
 
 	// 6. GORMによる更新
