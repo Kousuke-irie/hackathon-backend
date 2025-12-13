@@ -7,6 +7,7 @@ import (
 
 	"github.com/Kousuke-irie/hackathon-backend/database"
 	"github.com/Kousuke-irie/hackathon-backend/firebase"
+	"github.com/Kousuke-irie/hackathon-backend/gcs"
 	"github.com/Kousuke-irie/hackathon-backend/routes"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -20,6 +21,10 @@ func main() {
 	}
 	if err := firebase.InitFirebase(); err != nil {
 		log.Fatalf("Firebase initialization failed: %v", err)
+	}
+
+	if err := gcs.InitStorageClient(); err != nil {
+		log.Fatalf("Warning: GCS client initialization failed. Item upload functionality will be limited: %v", err)
 	}
 
 	// 2. ルーティング設定
@@ -39,13 +44,9 @@ func main() {
 	config.AllowCredentials = false
 	r.Use(cors.New(config))
 
-	// 静的ファイル（画像）の配信
-	r.Static("/uploads", "./uploads")
-
 	// 疎通確認用
 	r.GET("/", func(c *gin.Context) {
-		//c.JSON(http.StatusOK, gin.H{"message": "API is running"})
-		c.JSON(http.StatusOK, gin.H{"message": "Connectivity Test Succeeded"})
+		c.JSON(http.StatusOK, gin.H{"message": "API is running"})
 	})
 
 	routes.SetupRoutes(r)

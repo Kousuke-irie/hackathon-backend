@@ -15,7 +15,7 @@ RUN go mod download
 # ソースコードをコピーし、バイナリをビルド
 COPY . .
 # バイナリ名は 'main' とし、静的リンクを適用
-RUN go build -ldflags '-s -w' -o /usr/local/bin/main .
+RUN go build -ldflags '-s -w' -o main-app .
 
 FROM alpine:latest
 # Cloud Runがデフォルトで使用するポート
@@ -25,11 +25,9 @@ EXPOSE 8082
 WORKDIR /app
 
 # ステージ1でビルドしたバイナリをコピー
-COPY --from=builder /usr/local/bin/main .
+COPY --from=builder /app/main-app .
 
 COPY --from=builder /app/serviceAccountKey.json .
 
-RUN mkdir uploads
-
 # 実行可能なエントリポイント
-CMD ["./main"]
+CMD ["./main-app"]

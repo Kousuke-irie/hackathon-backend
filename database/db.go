@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/Kousuke-irie/hackathon-backend/models"
 	"gorm.io/driver/mysql"
@@ -23,7 +24,28 @@ func InitDB() error {
 	dbName := os.Getenv("DB_NAME")
 	cloudSQLConnName := os.Getenv("CLOUD_SQL_CONNECTION_NAME")
 
-	dsn = fmt.Sprintf("%s:%s@unix(/cloudsql/%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", dbUser, dbPassword, cloudSQLConnName, dbName)
+	isLocal := os.Getenv("IS_LOCAL")
+
+	if cloudSQLConnName == "" || strings.ToLower(isLocal) == "true" {
+		dbHost := os.Getenv("DB_HOST") // 例: localhost, 127.0.0.1
+		dbPort := os.Getenv("DB_PORT") // 例: 3306
+
+		if dbHost == "" {
+			dbHost = "127.0.0.1" // デフォルトのローカルホスト
+		}
+		if dbPort == "" {
+			dbPort = "3306" // MySQLのデフォルトポート
+		}
+
+		// ローカルのMySQLへのDSN (TCP接続)
+		dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+			dbUser, dbPassword, dbHost, dbPort, dbName)
+		log.Println("INFO: Connecting to Local MySQL via TCP.") // ログ出力
+	} else {
+		// Cloud Runデプロイ環境でのDSN (Unixソケット接続)
+		dsn = fmt.Sprintf("%s:%s@unix(/cloudsql/%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", dbUser, dbPassword, cloudSQLConnName, dbName)
+		log.Println("INFO: Connecting to Cloud SQL via Unix Socket.") // ログ出力
+	}
 
 	var err error
 	DBClient, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
