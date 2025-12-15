@@ -16,74 +16,65 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// ItemDataRequest ★ 新規: フロントエンドの ItemData に合わせた JSON リクエストボディの型を定義
+type ItemDataRequest struct {
+	Title         string `json:"title" binding:"required"`
+	Description   string `json:"description"`
+	Price         string `json:"price" binding:"required"`
+	SellerID      string `json:"seller_id" binding:"required"`
+	ImageURL      string `json:"image_url"` // ★ GCSにアップロード済みのURLを受け取る
+	CategoryID    string `json:"category_id" binding:"required"`
+	Condition     string `json:"condition" binding:"required"`
+	ShippingPayer string `json:"shipping_payer" binding:"required"`
+	ShippingFee   string `json:"shipping_fee" binding:"required"`
+	Status        string `json:"status" binding:"required"`
+}
+
 // CreateItemHandler 商品出品API
 func CreateItemHandler(c *gin.Context) {
-	// 1. マルチパートフォームからデータを取得
-	title := c.PostForm("title")
-	description := c.PostForm("description")
-	priceStr := c.PostForm("price")
-	sellerIDStr := c.PostForm("seller_id")
-	categoryIDStr := c.PostForm("category_id")
-	shippingFeeStr := c.PostForm("shipping_fee")
-	condition := c.PostForm("condition")
-	shippingPayer := c.PostForm("shipping_payer")
-	status := c.PostForm("status")
+	var req ItemDataRequest // JSONとして受け取る
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format or missing fields"})
+		return
+	}
 
-	price, err := strconv.Atoi(priceStr)
+	price, err := strconv.Atoi(req.Price)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid price value"})
 		return
 	}
 
-	categoryID, err := strconv.ParseUint(categoryIDStr, 10, 32) // uint 型に変換
-	if status != "DRAFT" && (err != nil || categoryID == 0) {
+	categoryID, err := strconv.ParseUint(req.CategoryID, 10, 32) // uint 型に変換
+	if req.Status != "DRAFT" && (err != nil || categoryID == 0) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid category ID"})
 		return
 	}
 
-	shippingFee, _ := strconv.Atoi(shippingFeeStr)
+	shippingFee, _ := strconv.Atoi(req.ShippingFee)
 
-	sellerID, err := strconv.ParseUint(sellerIDStr, 10, 64)
+	sellerID, err := strconv.ParseUint(req.SellerID, 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid seller ID"})
 		return
 	}
 
-	// 2. 画像ファイルの取得と保存
-	file, err := c.FormFile("image")
-	// ▼▼▼ 修正: 下書き保存（status != "ON_SALE"）の場合、画像を必須としない ▼▼▼
-	if err != nil {
-		if status != "DRAFT" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Image is required"})
-			return
-		}
-	}
-
-	imageURL := ""
-	if file != nil { // fileが存在する場合のみ保存
-		ctx := c.Request.Context()
-		uploadedURL, err := gcs.UploadFile(ctx, file, sellerID) // ユーザーIDは認証から取得
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload image"})
-			return
-		}
-		imageURL = uploadedURL
-	} else {
-		// 画像がない場合、プレースホルダーURLや空文字列を使用
-		imageURL = "https://placehold.jp/100x100.png"
+	// ★ 画像URLが必須のチェック
+	if req.Status != "DRAFT" && req.ImageURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Image URL is required for ON_SALE items"})
+		return
 	}
 
 	newItem := models.Item{
-		Title:         title,
-		Description:   description,
+		Title:         req.Title,
+		Description:   req.Description,
 		Price:         price,
 		SellerID:      sellerID,
-		ImageURL:      imageURL,
+		ImageURL:      req.ImageURL,
 		AITags:        "{}",
-		Status:        status,
+		Status:        req.Status,
 		CategoryID:    uint(categoryID),
-		Condition:     condition,
-		ShippingPayer: shippingPayer,
+		Condition:     req.Condition,
+		ShippingPayer: req.ShippingPayer,
 		ShippingFee:   shippingFee,
 	}
 
@@ -273,20 +264,16 @@ type UpdateItemRequest struct {
 func UpdateItemHandler(c *gin.Context) {
 	itemID := c.Param("id")
 
-	// 1. マルチパートフォームからデータを取得 (CreateItemHandlerと同じロジック)
-	title := c.PostForm("title")
-	description := c.PostForm("description")
-	priceStr := c.PostForm("price")
-	categoryIDStr := c.PostForm("category_id")
-	shippingFeeStr := c.PostForm("shipping_fee")
-	condition := c.PostForm("condition")
-	shippingPayer := c.PostForm("shipping_payer")
-	status := c.PostForm("status") // 'ON_SALE' or 'DRAFT'
+	var req ItemDataRequest // JSONとして受け取る
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format or missing fields"})
+		return
+	}
 
 	// 2. データ型変換
-	price, _ := strconv.Atoi(priceStr)
-	shippingFee, _ := strconv.Atoi(shippingFeeStr)
-	categoryID, _ := strconv.ParseUint(categoryIDStr, 10, 32)
+	price, _ := strconv.Atoi(req.Price)
+	shippingFee, _ := strconv.Atoi(req.ShippingFee)
+	categoryID, _ := strconv.ParseUint(req.CategoryID, 10, 32)
 
 	// 💡 注意: 編集時は seller_id はフォームから受け取る必要はありません
 
@@ -305,32 +292,17 @@ func UpdateItemHandler(c *gin.Context) {
 		return
 	}
 
-	// 5. 画像ファイルの処理 (オプション)
-	file, _ := c.FormFile("image")
-	imageURL := item.ImageURL // 既存のURLをデフォルトとして保持
-
-	if file != nil {
-		ctx := c.Request.Context()
-		// 💡 sellerID は item から取得
-		uploadedURL, err := gcs.UploadFile(ctx, file, item.SellerID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload new image"})
-			return
-		}
-		imageURL = uploadedURL
-	}
-
 	// 6. GORMによる更新
 	updateMap := map[string]interface{}{
-		"Title":         title,
-		"Description":   description,
+		"Title":         req.Title,
+		"Description":   req.Description,
 		"Price":         price,
-		"ImageURL":      imageURL, // 更新された画像URL
+		"ImageURL":      req.ImageURL, // ★ JSONから取得したGCS URLを使用
 		"CategoryID":    uint(categoryID),
-		"Condition":     condition,
-		"ShippingPayer": shippingPayer,
+		"Condition":     req.Condition,
+		"ShippingPayer": req.ShippingPayer,
 		"ShippingFee":   shippingFee,
-		"Status":        status,
+		"Status":        req.Status,
 	}
 
 	if err := db.Model(&item).Updates(updateMap).Error; err != nil {
@@ -414,4 +386,40 @@ func GetMyPurchasesInProgressHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"transactions": transactions})
+}
+
+// GetGcsUploadUrlHandler ★ 新規: 署名付きアップロードURLを取得するハンドラ
+func GetGcsUploadUrlHandler(c *gin.Context) {
+	var req struct {
+		FileName string `json:"file_name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: file_name is required"})
+		return
+	}
+
+	// 認証済みユーザーIDを取得（フロントからX-User-IDが来ている前提）
+	userIDStr := c.GetHeader("X-User-ID")
+	if userIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID header is required"})
+		return
+	}
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid User ID format"})
+		return
+	}
+
+	// GCSの署名付きURLと最終的な画像URLを生成
+	signedURL, imageURL, err := gcs.GenerateSignedUploadURL(c.Request.Context(), req.FileName, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to generate upload URL: %v", err)})
+		return
+	}
+
+	// フロントエンドに返す
+	c.JSON(http.StatusOK, gin.H{
+		"uploadUrl": signedURL,
+		"imageUrl":  imageURL,
+	})
 }
