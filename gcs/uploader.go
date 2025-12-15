@@ -41,6 +41,8 @@ func GenerateSignedUploadURL(ctx context.Context, fileName string, userID uint64
 	// 1. オブジェクト名の決定 (ユーザーIDとタイムスタンプでユニークにする)
 	objectName := fmt.Sprintf("items/%d/%d-%s", userID, time.Now().Unix(), fileName)
 
+	val := map[string][]string{"Content-Length": {"*"}}
+
 	// 2. 署名付きURLのオプション設定
 	opts := &storage.SignedURLOptions{
 		Scheme:         storage.SigningSchemeV4,          // V4署名スキーム
@@ -49,6 +51,7 @@ func GenerateSignedUploadURL(ctx context.Context, fileName string, userID uint64
 		GoogleAccessID: saKey.ClientEmail,
 		PrivateKey:     []byte(saKey.PrivateKey),
 		ContentType:    contentType,
+		Headers:        val["Content-Length"],
 	}
 
 	// 3. 署名付きURLの生成
