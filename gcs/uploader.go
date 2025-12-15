@@ -19,7 +19,7 @@ const BucketName = "hackathon-kousuke"
 
 // GenerateSignedUploadURL GCSへのアップロード用の署名付きURLを生成し、最終的な公開URLを返す
 // フロントエンドは、この signedURL に直接ファイルを PUT します。
-func GenerateSignedUploadURL(ctx context.Context, fileName string, userID uint64) (string, string, error) {
+func GenerateSignedUploadURL(ctx context.Context, fileName string, userID uint64, contentType string) (string, string, error) {
 	if StorageClient == nil {
 		return "", "", fmt.Errorf("gcs client is not initialized")
 	}
@@ -48,6 +48,7 @@ func GenerateSignedUploadURL(ctx context.Context, fileName string, userID uint64
 		Expires:        time.Now().Add(15 * time.Minute), // 有効期限 15分
 		GoogleAccessID: saKey.ClientEmail,
 		PrivateKey:     []byte(saKey.PrivateKey),
+		ContentType:    contentType,
 	}
 
 	// 3. 署名付きURLの生成

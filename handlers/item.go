@@ -391,10 +391,11 @@ func GetMyPurchasesInProgressHandler(c *gin.Context) {
 // GetGcsUploadUrlHandler ★ 新規: 署名付きアップロードURLを取得するハンドラ
 func GetGcsUploadUrlHandler(c *gin.Context) {
 	var req struct {
-		FileName string `json:"file_name" binding:"required"`
+		FileName    string `json:"file_name" binding:"required"`
+		ContentType string `json:"content_type" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: file_name is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: file_name and content_type are required"})
 		return
 	}
 
@@ -411,7 +412,7 @@ func GetGcsUploadUrlHandler(c *gin.Context) {
 	}
 
 	// GCSの署名付きURLと最終的な画像URLを生成
-	signedURL, imageURL, err := gcs.GenerateSignedUploadURL(c.Request.Context(), req.FileName, userID)
+	signedURL, imageURL, err := gcs.GenerateSignedUploadURL(c.Request.Context(), req.FileName, userID, req.ContentType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to generate upload URL: %v", err)})
 		return
