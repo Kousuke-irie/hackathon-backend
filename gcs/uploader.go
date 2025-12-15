@@ -2,13 +2,18 @@ package gcs
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
-	"mime/multipart"
+	"os"
 	"time"
 
 	"cloud.google.com/go/storage"
 )
+
+type ServiceAccountKey struct {
+	ClientEmail string `json:"client_email"`
+	PrivateKey  string `json:"private_key"`
+}
 
 const BucketName = "hackathon-kousuke"
 
@@ -19,14 +24,30 @@ func GenerateSignedUploadURL(ctx context.Context, fileName string, userID uint64
 		return "", "", fmt.Errorf("gcs client is not initialized")
 	}
 
+	// 署名に必要なサービスアカウントキーの情報をロード
+	keyFilePath := "serviceAccountKey.json" // Dockerfileでこの名前でコピーされている
+	keyData, err := os.ReadFile(keyFilePath)
+	if err != nil {
+		// サービスアカウントキーファイルの読み込み失敗
+		return "", "", fmt.Errorf("failed to read service account key file: %w", err)
+	}
+
+	var saKey ServiceAccountKey
+	if err := json.Unmarshal(keyData, &saKey); err != nil {
+		// JSONパース失敗
+		return "", "", fmt.Errorf("failed to parse service account key file: %w", err)
+	}
+
 	// 1. オブジェクト名の決定 (ユーザーIDとタイムスタンプでユニークにする)
 	objectName := fmt.Sprintf("items/%d/%d-%s", userID, time.Now().Unix(), fileName)
 
 	// 2. 署名付きURLのオプション設定
 	opts := &storage.SignedURLOptions{
-		Scheme:  storage.SigningSchemeV4,          // V4署名スキーム
-		Method:  "PUT",                            // ファイルのアップロードにはPUTメソッドを使用
-		Expires: time.Now().Add(15 * time.Minute), // 有効期限 15分
+		Scheme:         storage.SigningSchemeV4,          // V4署名スキーム
+		Method:         "PUT",                            // ファイルのアップロードにはPUTメソッドを使用
+		Expires:        time.Now().Add(15 * time.Minute), // 有効期限 15分
+		GoogleAccessID: saKey.ClientEmail,
+		PrivateKey:     []byte(saKey.PrivateKey),
 	}
 
 	// 3. 署名付きURLの生成
@@ -39,39 +60,4 @@ func GenerateSignedUploadURL(ctx context.Context, fileName string, userID uint64
 	imageURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", BucketName, objectName)
 
 	return signedURL, imageURL, nil
-}
-
-// UploadFile はファイルをGCSにアップロードし、公開URLを返す
-func UploadFile(ctx context.Context, file *multipart.FileHeader, userID uint64) (string, error) {
-	if StorageClient == nil {
-		return "", fmt.Errorf("gcs client is not initialized. Cannot upload file")
-	}
-
-	src, err := file.Open()
-	if err != nil {
-		return "", err
-	}
-	defer src.Close()
-
-	// GCSでのファイルパス/オブジェクト名を設定
-	objectName := fmt.Sprintf("items/%d/%d-%s", userID, time.Now().Unix(), file.Filename)
-
-	// バケットとオブジェクトを参照
-	wc := StorageClient.Bucket(BucketName).Object(objectName).NewWriter(ctx)
-
-	// GCSで公開閲覧可能にするための設定
-	wc.ContentType = file.Header.Get("Content-Type")
-	wc.ACL = []storage.ACLRule{
-		{Entity: storage.AllUsers, Role: storage.RoleReader},
-	}
-
-	if _, err = io.Copy(wc, src); err != nil {
-		return "", fmt.Errorf("failed to copy file to GCS: %w", err)
-	}
-	if err := wc.Close(); err != nil {
-		return "", fmt.Errorf("failed to close GCS writer: %w", err)
-	}
-
-	// 公開URLを返す
-	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", BucketName, objectName), nil
 }
