@@ -18,6 +18,7 @@ func SetupRoutes(r *gin.Engine) {
 		items.GET("/:id", handlers.GetItemDetailHandler)
 		items.PUT("/:id", handlers.UpdateItemHandler)
 		items.POST("/analyze", handlers.AnalyzeItemHandler)
+		items.POST("/upload-url", handlers.GetGcsUploadUrlHandler)
 		items.GET("/:id/comments", handlers.GetCommentsHandler)
 		items.POST("/:id/comments", handlers.PostCommentHandler)
 		items.POST("/:id/sold", handlers.CompletePurchaseAndCreateTransactionHandler)

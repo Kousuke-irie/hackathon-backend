@@ -3,6 +3,7 @@ module github.com/Kousuke-irie/hackathon-backend
 go 1.24.0
 
 require (
+	cloud.google.com/go/storage v1.53.0
 	cloud.google.com/go/vertexai v0.15.0
 	firebase.google.com/go/v4 v4.18.0
 	github.com/gin-contrib/cors v1.7.6
@@ -24,7 +25,6 @@ require (
 	cloud.google.com/go/iam v1.5.2 // indirect
 	cloud.google.com/go/longrunning v0.6.7 // indirect
 	cloud.google.com/go/monitoring v1.24.2 // indirect
-	cloud.google.com/go/storage v1.53.0 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.29.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.51.0 // indirect
