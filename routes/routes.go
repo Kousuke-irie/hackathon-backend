@@ -1,7 +1,11 @@
 package routes
 
 import (
+	"net/http"
+
+	"github.com/Kousuke-irie/hackathon-backend/database"
 	"github.com/Kousuke-irie/hackathon-backend/handlers"
+	"github.com/Kousuke-irie/hackathon-backend/models"
 	"github.com/gin-gonic/gin"
 )
 
@@ -66,5 +70,16 @@ func SetupRoutes(r *gin.Engine) {
 		tx.POST("/:tx_id/review", handlers.PostReviewHandler)             // 評価投稿
 		tx.POST("/:tx_id/cancel", handlers.CancelTransactionHandler)
 	}
+
+	// WebSocket エンドポイント
+	r.GET("/ws/notifications", handlers.WSNotificationHandler)
+
+	// 通知一覧取得 API (NotificationsPage用)
+	r.GET("/my/notifications", func(c *gin.Context) {
+		userID := c.GetHeader("X-User-ID")
+		var notifications []models.Notification
+		database.DBClient.Where("user_id = ?", userID).Order("created_at desc").Find(&notifications)
+		c.JSON(http.StatusOK, gin.H{"notifications": notifications})
+	})
 
 }
