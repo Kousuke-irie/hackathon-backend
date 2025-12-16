@@ -2,9 +2,7 @@ package gcs
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -24,44 +22,31 @@ func GenerateSignedUploadURL(ctx context.Context, fileName string, userID uint64
 		return "", "", fmt.Errorf("gcs client is not initialized")
 	}
 
-	// 署名に必要なサービスアカウントキーの情報をロード
-	keyFilePath := "serviceAccountKey.json" // Dockerfileでこの名前でコピーされている
-	keyData, err := os.ReadFile(keyFilePath)
-	if err != nil {
-		// サービスアカウントキーファイルの読み込み失敗
-		return "", "", fmt.Errorf("failed to read service account key file: %w", err)
-	}
-
-	var saKey ServiceAccountKey
-	if err := json.Unmarshal(keyData, &saKey); err != nil {
-		// JSONパース失敗
-		return "", "", fmt.Errorf("failed to parse service account key file: %w", err)
-	}
-
-	// 1. オブジェクト名の決定 (ユーザーIDとタイムスタンプでユニークにする)
+	// 1. オブジェクト名の決定
 	objectName := fmt.Sprintf("items/%d/%d-%s", userID, time.Now().Unix(), fileName)
 
-	val := map[string][]string{"Content-Length": {"*"}}
-
-	// 2. 署名付きURLのオプション設定
-	opts := &storage.SignedURLOptions{
-		Scheme:         storage.SigningSchemeV4,          // V4署名スキーム
-		Method:         "PUT",                            // ファイルのアップロードにはPUTメソッドを使用
-		Expires:        time.Now().Add(15 * time.Minute), // 有効期限 15分
-		GoogleAccessID: saKey.ClientEmail,
-		PrivateKey:     []byte(saKey.PrivateKey),
-		ContentType:    contentType,
-		Headers:        val["Content-Length"],
+	// 2. ブラウザが送るヘッダーを署名対象にする（403エラー対策）
+	signedHeaders := []string{
+		"Content-Length",
 	}
 
-	// 3. 署名付きURLの生成
+	// 3. 署名オプションの設定（秘密鍵とGoogleAccessIDを指定しない）
+	opts := &storage.SignedURLOptions{
+		Scheme:      storage.SigningSchemeV4,
+		Method:      "PUT",
+		Expires:     time.Now().Add(15 * time.Minute),
+		ContentType: contentType,
+		Headers:     signedHeaders,
+		// ★ ここがポイント: GoogleAccessID と PrivateKey を空にする
+		// これにより、SDKは環境（Cloud Run等）のデフォルトサービスアカウントを使用して署名を試みます
+	}
+
+	// 4. 署名付きURLの生成
 	signedURL, err := StorageClient.Bucket(BucketName).SignedURL(objectName, opts)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to generate signed URL: %w", err)
+		return "", "", fmt.Errorf("署名付きURLの生成に失敗しました（IAM権限を確認してください）: %w", err)
 	}
 
-	// 4. 最終的な公開URLを生成 (オブジェクトが公開アクセス可能になっている前提)
 	imageURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", BucketName, objectName)
-
 	return signedURL, imageURL, nil
 }
