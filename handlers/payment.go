@@ -63,7 +63,6 @@ func CreatePaymentIntentHandler(c *gin.Context) {
 	})
 }
 
-// 決済成功後商品ステータスを更新し取引レコードを作成するハンドラ
 func CompletePurchaseAndCreateTransactionHandler(c *gin.Context) {
 	// クライアント（フロントエンド）から、購入者IDと商品IDを受け取る
 	var req struct {
@@ -112,6 +111,16 @@ func CompletePurchaseAndCreateTransactionHandler(c *gin.Context) {
 		// 取引作成は成功しているので、ここでは警告ログを出す
 		fmt.Printf("Warning: Failed to update item status to IN_PROGRESS for item ID %d", req.ItemID)
 	}
+
+	// 出品者への通知
+	noti := models.Notification{
+		UserID:    item.SellerID,
+		Type:      "SOLD",
+		Content:   fmt.Sprintf("祝！「%s」が購入されました。発送準備をお願いします", item.Title),
+		RelatedID: item.ID,
+	}
+	database.DBClient.Create(&noti)
+	BroadcastNotification(item.SellerID, noti)
 
 	// 5. 成功レスポンスを返す
 	c.JSON(http.StatusOK, gin.H{

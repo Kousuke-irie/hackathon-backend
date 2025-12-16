@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -53,4 +54,22 @@ func PostCommentHandler(c *gin.Context) {
 	database.DBClient.Preload("User").First(&newComment, newComment.ID)
 
 	c.JSON(http.StatusOK, gin.H{"comment": newComment})
+
+	// 通知の作成と送信
+	var item models.Item
+	database.DBClient.First(&item, newComment.ItemID)
+
+	// 自分の商品へのコメントでない場合のみ通知
+	if item.SellerID != req.UserID {
+		noti := models.Notification{
+			UserID:    item.SellerID,
+			Type:      "COMMENT",
+			Content:   fmt.Sprintf("%sさんがあなたの商品にコメントしました", newComment.User.Username),
+			RelatedID: item.ID,
+		}
+		database.DBClient.Create(&noti)
+
+		// WebSocket経由でリアルタイム送信
+		BroadcastNotification(item.SellerID, noti)
+	}
 }

@@ -93,5 +93,29 @@ func PostToCommunityHandler(c *gin.Context) {
 	// レスポンス用に紐付け情報を再取得
 	database.DBClient.Preload("User").Preload("RelatedItem").First(&newPost, newPost.ID)
 
+	// 直近でその界隈に投稿したユーザーを取得（自分以外）
+	var recentPosters []uint64
+	database.DBClient.Model(&models.CommunityPost{}).
+		Where("community_id = ? AND user_id != ?", communityID, req.UserID).
+		Order("created_at desc").
+		Limit(5).
+		Pluck("user_id", &recentPosters)
+
+	// 重複を排除して通知を送信
+	sentUsers := make(map[uint64]bool)
+	for _, targetID := range recentPosters {
+		if !sentUsers[targetID] {
+			noti := models.Notification{
+				UserID:    targetID,
+				Type:      "COMMUNITY",
+				Content:   "あなたが参加した界隈に新しい投稿がありました",
+				RelatedID: uint64(communityID),
+			}
+			database.DBClient.Create(&noti)
+			BroadcastNotification(targetID, noti)
+			sentUsers[targetID] = true
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"post": newPost})
 }

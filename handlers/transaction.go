@@ -44,6 +44,20 @@ func UpdateTransactionStatusHandler(c *gin.Context) {
 		return
 	}
 
+	if req.NewStatus == "SHIPPED" {
+		var tx models.Transaction
+		database.DBClient.Preload("Item").First(&tx, txID)
+
+		noti := models.Notification{
+			UserID:    tx.BuyerID,
+			Type:      "SHIPPED",
+			Content:   fmt.Sprintf("商品「%s」が発送されました。到着までお待ちください", tx.Item.Title),
+			RelatedID: tx.ItemID,
+		}
+		database.DBClient.Create(&noti)
+		BroadcastNotification(tx.BuyerID, noti)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "Status updated", "new_status": req.NewStatus})
 }
 
@@ -64,9 +78,6 @@ func PostReviewHandler(c *gin.Context) {
 
 	db := database.DBClient
 
-	// 1. 評価の重複チェック (ここでは簡易的に省略。本来はRaterIDとTransactionIDの組み合わせをチェック)
-
-	// 2. 評価の保存
 	newReview := models.Review{
 		TransactionID: txID,
 		RaterID:       req.RaterID,
@@ -129,6 +140,18 @@ func CancelTransactionHandler(c *gin.Context) {
 		// 在庫の復元に失敗しても、取引自体はキャンセル済みとして続行
 		fmt.Printf("Warning: Failed to restore item status for item ID %d", tx.ItemID)
 	}
+
+	database.DBClient.Preload("Item").First(&tx, txID)
+
+	// 評価された側（この場合は出品者）に通知
+	noti := models.Notification{
+		UserID:    tx.SellerID,
+		Type:      "RECEIVED",
+		Content:   fmt.Sprintf("「%s」の受取評価が完了しました。取引完了です！", tx.Item.Title),
+		RelatedID: tx.ItemID,
+	}
+	database.DBClient.Create(&noti)
+	BroadcastNotification(tx.SellerID, noti)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Transaction canceled successfully"})
 }
