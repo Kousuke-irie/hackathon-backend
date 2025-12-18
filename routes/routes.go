@@ -55,6 +55,7 @@ func SetupRoutes(r *gin.Engine) {
 	{
 		comm.GET("", handlers.GetCommunitiesHandler)
 		comm.POST("", handlers.CreateCommunityHandler)
+		comm.PUT("/:id", handlers.UpdateCommunityHandler)
 		comm.GET("/:id/posts", handlers.GetCommunityPostsHandler)
 		comm.POST("/:id/posts", handlers.PostToCommunityHandler)
 	}

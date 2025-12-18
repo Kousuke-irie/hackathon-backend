@@ -80,6 +80,7 @@ type Community struct {
 	Name        string    `gorm:"type:varchar(255);not null" json:"name"`
 	Description string    `gorm:"type:text" json:"description"`
 	ImageURL    string    `gorm:"type:text" json:"image_url"`
+	CreatorID   uint64    `gorm:"not null" json:"creator_id"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
