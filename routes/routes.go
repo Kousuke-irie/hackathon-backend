@@ -70,6 +70,7 @@ func SetupRoutes(r *gin.Engine) {
 	// ▼▼▼  取引関連 API ▼▼▼
 	tx := r.Group("/transactions")
 	{
+		tx.GET("/:tx_id", handlers.GetTransactionDetailHandler)
 		tx.PUT("/:tx_id/status", handlers.UpdateTransactionStatusHandler) // ステータス更新
 		tx.POST("/:tx_id/review", handlers.PostReviewHandler)             // 評価投稿
 		tx.POST("/:tx_id/cancel", handlers.CancelTransactionHandler)

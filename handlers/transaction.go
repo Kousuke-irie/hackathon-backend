@@ -158,3 +158,21 @@ func CancelTransactionHandler(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Transaction canceled successfully"})
 }
+
+// GetTransactionDetailHandler 取引詳細を取得
+func GetTransactionDetailHandler(c *gin.Context) {
+	txID := c.Param("tx_id")
+
+	var transaction models.Transaction
+	// 商品情報とその出品者、および購入者情報をまとめて取得
+	if err := database.DBClient.
+		Preload("Item").
+		Preload("Item.Seller").
+		Preload("Buyer").
+		First(&transaction, txID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"transaction": transaction})
+}
