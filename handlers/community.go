@@ -129,7 +129,10 @@ func UpdateCommunityHandler(c *gin.Context) {
 	userID := c.GetHeader("X-User-ID")
 
 	var comm models.Community
-	database.DBClient.First(&comm, id)
+	if err := database.DBClient.First(&comm, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Community not found"})
+		return
+	}
 
 	if fmt.Sprintf("%d", comm.CreatorID) != userID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "作成者のみが編集できます"})
@@ -156,4 +159,24 @@ func UpdateCommunityHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Community updated successfully"})
+}
+
+func DeleteCommunityHandler(c *gin.Context) {
+	id := c.Param("id")
+	userIDStr := c.GetHeader("X-User-ID")
+
+	var comm models.Community
+	if err := database.DBClient.First(&comm, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Community not found"})
+		return
+	}
+
+	if fmt.Sprintf("%d", comm.CreatorID) != userIDStr {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only the creator can delete this community"})
+		return
+	}
+
+	// 関連する投稿も削除する場合はトランザクションを推奨
+	database.DBClient.Delete(&comm)
+	c.JSON(http.StatusOK, gin.H{"message": "Community deleted"})
 }
