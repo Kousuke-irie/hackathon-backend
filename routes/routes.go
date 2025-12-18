@@ -2,6 +2,7 @@ package routes
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/Kousuke-irie/hackathon-backend/database"
 	"github.com/Kousuke-irie/hackathon-backend/handlers"
@@ -76,16 +77,23 @@ func SetupRoutes(r *gin.Engine) {
 
 	// 通知一覧取得 API (NotificationsPage用)
 	r.GET("/my/notifications", func(c *gin.Context) {
-		userID := c.GetHeader("X-User-ID")
-		if userID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "User ID is required"})
+		userIDStr := c.GetHeader("X-User-ID")
+		if userIDStr == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "X-User-ID header is required"})
 			return
 		}
-
+		userID, err := strconv.ParseUint(userIDStr, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid User ID format"})
+			return
+		}
 		var notifications []models.Notification
 		if err := database.DBClient.Where("user_id = ?", userID).Order("created_at desc").Find(&notifications).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notifications"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error: " + err.Error()})
 			return
+		}
+		if notifications == nil {
+			notifications = []models.Notification{}
 		}
 		c.JSON(http.StatusOK, gin.H{"notifications": notifications})
 	})
