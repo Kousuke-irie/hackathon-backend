@@ -113,7 +113,7 @@ func CancelTransactionHandler(c *gin.Context) {
 		return
 	}
 
-	db := database.DBClient
+	db := database.DBClient.Begin()
 	var tx models.Transaction
 
 	// 1. 取引の現在のステータスと存在を確認
@@ -129,17 +129,20 @@ func CancelTransactionHandler(c *gin.Context) {
 	}
 
 	// 3. ステータスを CANCELED に更新
-	if err := db.Model(&tx).Update("Status", "CANCELED").Error; err != nil {
+	if err := db.Model(&tx).Where("id = ?", txID).Update("Status", "CANCELED").Error; err != nil {
+		db.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel transaction"})
 		return
 	}
 
 	// 4. 💡 関連する商品（Item）のステータスもON_SALEに戻す（在庫復活）
-	// ※ 厳密には取引キャンセルと同時に在庫を戻すべきですが、ここでは Item ID が必要
+	db.First(&tx, txID)
 	if err := db.Model(&models.Item{}).Where("id = ?", tx.ItemID).Update("Status", "ON_SALE").Error; err != nil {
-		// 在庫の復元に失敗しても、取引自体はキャンセル済みとして続行
-		fmt.Printf("Warning: Failed to restore item status for item ID %d", tx.ItemID)
+		db.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "商品の再販設定失敗"})
 	}
+
+	db.Commit()
 
 	database.DBClient.Preload("Item").First(&tx, txID)
 

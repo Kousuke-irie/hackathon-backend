@@ -67,6 +67,7 @@ func InitDB() error {
 		&models.User{},
 		&models.Category{},
 		&models.ProductCondition{},
+		&models.Notification{},
 	)
 
 	if err != nil {
@@ -80,7 +81,7 @@ func InitDB() error {
 	err = DBClient.AutoMigrate(
 		&models.User{}, &models.Item{}, &models.Transaction{},
 		&models.Like{}, &models.Comment{}, &models.Community{}, &models.CommunityPost{},
-		&models.Category{}, &models.ProductCondition{}, &models.Review{},
+		&models.Category{}, &models.ProductCondition{}, &models.Review{}, &models.Notification{},
 	)
 
 	// ▼▼▼ 【修正点2】マイグレーション後に外部キーチェックを有効に戻す ▼▼▼
