@@ -1,7 +1,12 @@
 package routes
 
 import (
+	"net/http"
+	"strconv"
+
+	"github.com/Kousuke-irie/hackathon-backend/database"
 	"github.com/Kousuke-irie/hackathon-backend/handlers"
+	"github.com/Kousuke-irie/hackathon-backend/models"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,6 +23,7 @@ func SetupRoutes(r *gin.Engine) {
 		items.GET("/:id", handlers.GetItemDetailHandler)
 		items.PUT("/:id", handlers.UpdateItemHandler)
 		items.POST("/analyze", handlers.AnalyzeItemHandler)
+		items.POST("/upload-url", handlers.GetGcsUploadUrlHandler)
 		items.GET("/:id/comments", handlers.GetCommentsHandler)
 		items.POST("/:id/comments", handlers.PostCommentHandler)
 		items.POST("/:id/sold", handlers.CompletePurchaseAndCreateTransactionHandler)
@@ -50,6 +56,8 @@ func SetupRoutes(r *gin.Engine) {
 	{
 		comm.GET("", handlers.GetCommunitiesHandler)
 		comm.POST("", handlers.CreateCommunityHandler)
+		comm.PUT("/:id", handlers.UpdateCommunityHandler)
+		comm.DELETE("/:id", handlers.DeleteCommunityHandler)
 		comm.GET("/:id/posts", handlers.GetCommunityPostsHandler)
 		comm.POST("/:id/posts", handlers.PostToCommunityHandler)
 	}
@@ -66,5 +74,46 @@ func SetupRoutes(r *gin.Engine) {
 		tx.POST("/:tx_id/review", handlers.PostReviewHandler)             // 評価投稿
 		tx.POST("/:tx_id/cancel", handlers.CancelTransactionHandler)
 	}
+
+	// WebSocket エンドポイント
+	r.GET("/ws/notifications", handlers.WSNotificationHandler)
+
+	// 通知一覧取得 API (NotificationsPage用)
+	r.GET("/my/notifications", func(c *gin.Context) {
+		// 1. ヘッダーから ID を取得
+		userIDStr := c.GetHeader("X-User-ID")
+		if userIDStr == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "X-User-ID header is required"})
+			return
+		}
+
+		// 2. 文字列を uint64 に変換。エラーがあれば即座に 400 を返す
+		userID, err := strconv.ParseUint(userIDStr, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid User ID format in header"})
+			return
+		}
+
+		var notifications []models.Notification
+
+		// 3. データベース検索
+		// 💡 修正ポイント: クエリを分割して確実に取得し、Order の指定を文字列で明示する
+		db := database.DBClient
+		if err := db.Where("user_id = ?", userID).Order("id DESC").Find(&notifications).Error; err != nil {
+			// ここで 500 エラーが発生する場合、詳細をレスポンスに含めて原因を特定する
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "Database query failed",
+				"details": err.Error(),
+			})
+			return
+		}
+
+		// 4. 結果が null の場合は明示的に空配列にする (フロントエンドの .map でのエラー防止)
+		if notifications == nil {
+			notifications = []models.Notification{}
+		}
+
+		c.JSON(http.StatusOK, gin.H{"notifications": notifications})
+	})
 
 }

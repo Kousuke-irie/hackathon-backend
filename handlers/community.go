@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -25,6 +26,7 @@ func CreateCommunityHandler(c *gin.Context) {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 		ImageURL    string `json:"image_url"`
+		CreatorID   uint64 `json:"creator_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
@@ -35,6 +37,7 @@ func CreateCommunityHandler(c *gin.Context) {
 		Name:        req.Name,
 		Description: req.Description,
 		ImageURL:    req.ImageURL,
+		CreatorID:   req.CreatorID,
 	}
 
 	if err := database.DBClient.Create(&newComm).Error; err != nil {
@@ -93,5 +96,87 @@ func PostToCommunityHandler(c *gin.Context) {
 	// レスポンス用に紐付け情報を再取得
 	database.DBClient.Preload("User").Preload("RelatedItem").First(&newPost, newPost.ID)
 
+	// 直近でその界隈に投稿したユーザーを取得（自分以外）
+	var recentPosters []uint64
+	database.DBClient.Model(&models.CommunityPost{}).
+		Where("community_id = ? AND user_id != ?", communityID, req.UserID).
+		Order("created_at desc").
+		Limit(5).
+		Pluck("user_id", &recentPosters)
+
+	// 重複を排除して通知を送信
+	sentUsers := make(map[uint64]bool)
+	for _, targetID := range recentPosters {
+		if !sentUsers[targetID] {
+			noti := models.Notification{
+				UserID:    targetID,
+				Type:      "COMMUNITY",
+				Content:   "あなたが参加した界隈に新しい投稿がありました",
+				RelatedID: uint64(communityID),
+			}
+			database.DBClient.Create(&noti)
+			BroadcastNotification(targetID, noti)
+			sentUsers[targetID] = true
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"post": newPost})
+}
+
+// UpdateCommunityHandler コミュニティ情報の更新
+func UpdateCommunityHandler(c *gin.Context) {
+	id := c.Param("id")
+	userID := c.GetHeader("X-User-ID")
+
+	var comm models.Community
+	if err := database.DBClient.First(&comm, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Community not found"})
+		return
+	}
+
+	if fmt.Sprintf("%d", comm.CreatorID) != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "作成者のみが編集できます"})
+		return
+	}
+
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		ImageURL    string `json:"image_url"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	if err := database.DBClient.Model(&models.Community{}).Where("id = ?", id).Updates(models.Community{
+		Name:        req.Name,
+		Description: req.Description,
+		ImageURL:    req.ImageURL,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update community"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Community updated successfully"})
+}
+
+func DeleteCommunityHandler(c *gin.Context) {
+	id := c.Param("id")
+	userIDStr := c.GetHeader("X-User-ID")
+
+	var comm models.Community
+	if err := database.DBClient.First(&comm, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Community not found"})
+		return
+	}
+
+	if fmt.Sprintf("%d", comm.CreatorID) != userIDStr {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only the creator can delete this community"})
+		return
+	}
+
+	// 関連する投稿も削除する場合はトランザクションを推奨
+	database.DBClient.Delete(&comm)
+	c.JSON(http.StatusOK, gin.H{"message": "Community deleted"})
 }

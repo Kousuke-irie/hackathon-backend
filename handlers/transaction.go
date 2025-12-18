@@ -44,6 +44,20 @@ func UpdateTransactionStatusHandler(c *gin.Context) {
 		return
 	}
 
+	if req.NewStatus == "SHIPPED" {
+		var tx models.Transaction
+		database.DBClient.Preload("Item").First(&tx, txID)
+
+		noti := models.Notification{
+			UserID:    tx.BuyerID,
+			Type:      "SHIPPED",
+			Content:   fmt.Sprintf("商品「%s」が発送されました。到着までお待ちください", tx.Item.Title),
+			RelatedID: tx.ItemID,
+		}
+		database.DBClient.Create(&noti)
+		BroadcastNotification(tx.BuyerID, noti)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "Status updated", "new_status": req.NewStatus})
 }
 
@@ -64,9 +78,6 @@ func PostReviewHandler(c *gin.Context) {
 
 	db := database.DBClient
 
-	// 1. 評価の重複チェック (ここでは簡易的に省略。本来はRaterIDとTransactionIDの組み合わせをチェック)
-
-	// 2. 評価の保存
 	newReview := models.Review{
 		TransactionID: txID,
 		RaterID:       req.RaterID,
@@ -102,7 +113,7 @@ func CancelTransactionHandler(c *gin.Context) {
 		return
 	}
 
-	db := database.DBClient
+	db := database.DBClient.Begin()
 	var tx models.Transaction
 
 	// 1. 取引の現在のステータスと存在を確認
@@ -118,17 +129,32 @@ func CancelTransactionHandler(c *gin.Context) {
 	}
 
 	// 3. ステータスを CANCELED に更新
-	if err := db.Model(&tx).Update("Status", "CANCELED").Error; err != nil {
+	if err := db.Model(&tx).Where("id = ?", txID).Update("Status", "CANCELED").Error; err != nil {
+		db.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel transaction"})
 		return
 	}
 
 	// 4. 💡 関連する商品（Item）のステータスもON_SALEに戻す（在庫復活）
-	// ※ 厳密には取引キャンセルと同時に在庫を戻すべきですが、ここでは Item ID が必要
+	db.First(&tx, txID)
 	if err := db.Model(&models.Item{}).Where("id = ?", tx.ItemID).Update("Status", "ON_SALE").Error; err != nil {
-		// 在庫の復元に失敗しても、取引自体はキャンセル済みとして続行
-		fmt.Printf("Warning: Failed to restore item status for item ID %d", tx.ItemID)
+		db.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "商品の再販設定失敗"})
 	}
+
+	db.Commit()
+
+	database.DBClient.Preload("Item").First(&tx, txID)
+
+	// 評価された側（この場合は出品者）に通知
+	noti := models.Notification{
+		UserID:    tx.SellerID,
+		Type:      "RECEIVED",
+		Content:   fmt.Sprintf("「%s」の受取評価が完了しました。取引完了です！", tx.Item.Title),
+		RelatedID: tx.ItemID,
+	}
+	database.DBClient.Create(&noti)
+	BroadcastNotification(tx.SellerID, noti)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Transaction canceled successfully"})
 }

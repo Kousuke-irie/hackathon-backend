@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/Kousuke-irie/hackathon-backend/database"
 	"github.com/Kousuke-irie/hackathon-backend/models"
@@ -49,7 +50,7 @@ func CreatePaymentIntentHandler(c *gin.Context) {
 	}
 
 	// メタデータに商品IDを入れておく（管理画面で見やすいように）
-	params.AddMetadata("item_id", string(rune(item.ID)))
+	params.AddMetadata("item_id", strconv.FormatUint(item.ID, 10))
 
 	pi, err := paymentintent.New(params)
 	if err != nil {
@@ -63,7 +64,6 @@ func CreatePaymentIntentHandler(c *gin.Context) {
 	})
 }
 
-// 決済成功後商品ステータスを更新し取引レコードを作成するハンドラ
 func CompletePurchaseAndCreateTransactionHandler(c *gin.Context) {
 	// クライアント（フロントエンド）から、購入者IDと商品IDを受け取る
 	var req struct {
@@ -84,38 +84,47 @@ func CompletePurchaseAndCreateTransactionHandler(c *gin.Context) {
 		return
 	}
 
-	// 2. 売り切れチェック（念のため）
-	if item.Status != "ON_SALE" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Item is not available for purchase"})
+	tx := db.Begin() // トランザクション開始
+
+	// 1. 商品を SOLD に更新 (ON_SALE のものだけを対象にして二重購入防止)
+	result := tx.Model(&models.Item{}).
+		Where("id = ? AND status = ?", req.ItemID, "ON_SALE").
+		Update("status", "SOLD")
+
+	if result.RowsAffected == 0 {
+		tx.Rollback()
+		c.JSON(http.StatusBadRequest, gin.H{"error": "商品が既に売り切れているか、存在しません"})
 		return
 	}
 
-	// 3. 取引(Transaction)レコードの作成
-	newTransaction := models.Transaction{
-		ItemID:        req.ItemID,
-		SellerID:      item.SellerID,
-		BuyerID:       req.BuyerID,
-		PriceSnapshot: item.Price, // 取引時の価格を記録
-		// 最初のステータスは 'PURCHASED' (購入者が支払いを完了したが、出品者はまだ発送していない状態)
-		Status: "PURCHASED",
+	// 2. 取引(Transaction)レコードを作成
+	newTx := models.Transaction{
+		ItemID:   req.ItemID,
+		BuyerID:  req.BuyerID,
+		SellerID: item.SellerID,
+		Status:   "PURCHASED", // 取引開始
 	}
-
-	if err := db.Create(&newTransaction).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create transaction record"})
+	if err := tx.Create(&newTx).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "取引の作成に失敗しました"})
 		return
 	}
 
-	// 4. 💡 商品(Item)のステータスを 'IN_PROGRESS' に更新
-	//    これにより、商品が売約済みとなり、他のユーザーが購入できなくなる。
-	//    (取引が完了/キャンセルされるまでこのステータスを維持)
-	if err := db.Model(&models.Item{}).Where("id = ?", req.ItemID).Update("Status", "IN_PROGRESS").Error; err != nil {
-		// 取引作成は成功しているので、ここでは警告ログを出す
-		fmt.Printf("Warning: Failed to update item status to IN_PROGRESS for item ID %d", req.ItemID)
+	tx.Commit()
+
+	// 出品者への通知
+	noti := models.Notification{
+		UserID:    item.SellerID,
+		Type:      "SOLD",
+		Content:   fmt.Sprintf("祝！「%s」が購入されました。発送準備をお願いします", item.Title),
+		RelatedID: item.ID,
 	}
+	database.DBClient.Create(&noti)
+	BroadcastNotification(item.SellerID, noti)
 
 	// 5. 成功レスポンスを返す
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "Purchase completed and transaction created successfully",
-		"transaction_id": newTransaction.ID,
+		"transaction_id": newTx.ID,
 	})
 }

@@ -46,7 +46,7 @@ type Transaction struct {
 	PriceSnapshot   int       `gorm:"not null" json:"price_snapshot"`
 	StripePaymentID string    `gorm:"type:varchar(255)" json:"stripe_payment_id"`
 	CreatedAt       time.Time `json:"created_at"`
-	Status          string    `gorm:"type:enum('PURCHASED','SHIPPED','RECEIVED','COMPLETED','CANCELED');default:'PURCHASED';not null" json:"status"`
+	Status          string    `gorm:"type:enum('PURCHASED','SHIPPED','COMPLETED','CANCELED');default:'PURCHASED';not null" json:"status"`
 
 	// Relations
 	Item  Item `gorm:"foreignKey:ItemID" json:"item,omitempty"`
@@ -80,6 +80,7 @@ type Community struct {
 	Name        string    `gorm:"type:varchar(255);not null" json:"name"`
 	Description string    `gorm:"type:text" json:"description"`
 	ImageURL    string    `gorm:"type:text" json:"image_url"`
+	CreatorID   uint64    `gorm:"not null" json:"creator_id"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -128,4 +129,15 @@ type Review struct {
 	// Relations
 	Transaction Transaction `gorm:"foreignKey:TransactionID" json:"-"`
 	Rater       User        `gorm:"foreignKey:RaterID" json:"rater"`
+}
+
+// Notification 通知
+type Notification struct {
+	ID        uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID    uint64    `gorm:"not null;index" json:"user_id"`
+	Type      string    `gorm:"type:varchar(50);not null" json:"type"`
+	Content   string    `gorm:"type:text;not null" json:"content"`
+	RelatedID uint64    `json:"related_id"`
+	IsRead    bool      `gorm:"default:false;not null" json:"is_read"`
+	CreatedAt time.Time `json:"created_at"`
 }

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
 	"cloud.google.com/go/vertexai/genai"
+	"google.golang.org/api/option"
 )
 
 // AIResponse Geminiが返すデータの構造
@@ -24,7 +26,16 @@ func AnalyzeImage(ctx context.Context, imagePath string, categoriesJSON string) 
 	projectID := os.Getenv("GCP_PROJECT_ID") // 後で環境変数に追加します
 	location := "us-central1"                // Geminiが使えるリージョン
 
-	client, err := genai.NewClient(ctx, projectID, location)
+	credsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	var opts []option.ClientOption
+
+	if credsPath != "" {
+		opts = append(opts, option.WithCredentialsFile(credsPath))
+	} else {
+		log.Println("WARNING: GOOGLE_APPLICATION_CREDENTIALS is not set for Gemini. Trying default authentication...")
+	}
+
+	client, err := genai.NewClient(ctx, projectID, location, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create genai client: %w", err)
 	}
