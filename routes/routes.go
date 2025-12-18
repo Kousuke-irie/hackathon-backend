@@ -77,8 +77,16 @@ func SetupRoutes(r *gin.Engine) {
 	// 通知一覧取得 API (NotificationsPage用)
 	r.GET("/my/notifications", func(c *gin.Context) {
 		userID := c.GetHeader("X-User-ID")
+		if userID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "User ID is required"})
+			return
+		}
+
 		var notifications []models.Notification
-		database.DBClient.Where("user_id = ?", userID).Order("created_at desc").Find(&notifications)
+		if err := database.DBClient.Where("user_id = ?", userID).Order("created_at desc").Find(&notifications).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notifications"})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"notifications": notifications})
 	})
 

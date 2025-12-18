@@ -134,9 +134,9 @@ type Review struct {
 type Notification struct {
 	ID        uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
 	UserID    uint64    `gorm:"not null;index" json:"user_id"`
-	Type      string    `gorm:"type:varchar(50);not null" json:"type"` // LIKE, COMMENT, PURCHASED, etc.
+	Type      string    `gorm:"type:varchar(50);not null" json:"type"`
 	Content   string    `gorm:"type:text;not null" json:"content"`
-	RelatedID uint64    `json:"related_id"` // 商品IDなどの関連ID
+	RelatedID uint64    `json:"related_id"`
 	IsRead    bool      `gorm:"default:false;not null" json:"is_read"`
 	CreatedAt time.Time `json:"created_at"`
 }
