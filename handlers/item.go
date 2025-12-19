@@ -387,7 +387,7 @@ func GetMyPurchasesInProgressHandler(c *gin.Context) {
 	inProgressStatuses := []string{"PURCHASED", "SHIPPED", "RECEIVED"}
 
 	if err := db.
-		Preload("Item"). // 関連する商品情報を取得
+		Preload("Item").        // 関連する商品情報を取得
 		Preload("Item.Seller"). // 商品の出品者情報も取得
 		Where("buyer_id = ?", userID).
 		Where("status IN (?)", inProgressStatuses).

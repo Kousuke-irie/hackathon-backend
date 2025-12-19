@@ -159,7 +159,7 @@ func CancelTransactionHandler(c *gin.Context) {
 		UserID:    tx.SellerID,
 		Type:      "RECEIVED",
 		Content:   fmt.Sprintf("「%s」の受取評価が完了しました。取引完了です！", tx.Item.Title),
-		RelatedID: tx.ItemID,
+		RelatedID: tx.ID,
 	}
 	database.DBClient.Create(&noti)
 	BroadcastNotification(tx.SellerID, noti)
