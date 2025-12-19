@@ -387,7 +387,7 @@ func GetMyPurchasesInProgressHandler(c *gin.Context) {
 	inProgressStatuses := []string{"PURCHASED", "SHIPPED", "RECEIVED"}
 
 	if err := db.
-		Preload("Item"). // 関連する商品情報を取得
+		Preload("Item").        // 関連する商品情報を取得
 		Preload("Item.Seller"). // 商品の出品者情報も取得
 		Where("buyer_id = ?", userID).
 		Where("status IN (?)", inProgressStatuses).
@@ -489,4 +489,42 @@ func GetMySalesHistoryHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"transactions": transactions})
+}
+
+// GetFollowingItemsHandler フォロー中ユーザーの出品を取得
+func GetFollowingItemsHandler(c *gin.Context) {
+	userID := c.GetHeader("X-User-ID")
+	var items []models.Item
+	// サブクエリでフォロー中のIDを抽出し、それらの最新出品を取得
+	database.DBClient.
+		Joins("JOIN follows ON follows.following_id = items.seller_id").
+		Where("follows.follower_id = ? AND items.status = ?", userID, "ON_SALE").
+		Order("items.created_at DESC").Limit(10).Find(&items)
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+// GetCategoryRecommendationsHandler 最近の閲覧・購入カテゴリからおすすめを取得
+func GetCategoryRecommendationsHandler(c *gin.Context) {
+	userID := c.GetHeader("X-User-ID")
+	// 簡略化例: 直近の「購入」カテゴリを取得し、そのカテゴリから自分以外の商品を出す
+	var lastCategoryID uint
+	database.DBClient.Model(&models.Transaction{}).
+		Joins("JOIN items ON items.id = transactions.item_id").
+		Where("transactions.buyer_id = ?", userID).
+		Order("transactions.created_at DESC").Limit(1).Pluck("items.category_id", &lastCategoryID)
+
+	var items []models.Item
+	database.DBClient.Where("category_id = ? AND seller_id != ? AND status = ?", lastCategoryID, userID, "ON_SALE").
+		Limit(10).Find(&items)
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+// GetRecommendedUsersHandler おすすめのアカウント（共通のカテゴリを出品している人など）
+func GetRecommendedUsersHandler(c *gin.Context) {
+	userID := c.GetHeader("X-User-ID")
+	var users []models.User
+	// 実装例: まだフォローしていない、かつ出品数が多いユーザーを推奨
+	database.DBClient.Where("id != ? AND id NOT IN (SELECT following_id FROM follows WHERE follower_id = ?)", userID, userID).
+		Order("follower_count DESC").Limit(8).Find(&users)
+	c.JSON(http.StatusOK, gin.H{"users": users})
 }

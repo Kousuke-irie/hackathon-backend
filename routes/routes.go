@@ -46,6 +46,9 @@ func SetupRoutes(r *gin.Engine) {
 		my.GET("/in-progress", handlers.GetMyPurchasesInProgressHandler)
 		my.GET("/sales-in-progress", handlers.GetMySalesInProgressHandler)
 		my.GET("/sales-history", handlers.GetMySalesHistoryHandler)
+		my.GET("/following-items", handlers.GetFollowingItemsHandler)
+		my.GET("/recommend-users", handlers.GetRecommendedUsersHandler)
+		my.GET("/category-recommendations", handlers.GetCategoryRecommendationsHandler)
 	}
 
 	// スワイプ
