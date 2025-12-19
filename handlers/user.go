@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/Kousuke-irie/hackathon-backend/database"
 	"github.com/Kousuke-irie/hackathon-backend/models"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // UpdateUserRequest ユーザー更新用リクエスト
@@ -126,10 +129,107 @@ func GetUserByIDHandler(c *gin.Context) {
 	var user models.User
 
 	// 💡 セキュリティのため、Emailなど非公開にすべき情報は返さないように調整
-	if err := database.DBClient.Select("id, username, icon_url, bio, created_at").First(&user, userID).Error; err != nil {
+	if err := database.DBClient.Select("id, username, icon_url, bio, following_count, follower_count, created_at").First(&user, userID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"user": user})
+}
+
+// ToggleFollowHandler フォロー/解除を切り替える
+func ToggleFollowHandler(c *gin.Context) {
+	followerIDStr := c.GetHeader("X-User-ID")
+	followerID, _ := strconv.ParseUint(followerIDStr, 10, 64)
+
+	followingIDStr := c.Param("id")
+	followingID, _ := strconv.ParseUint(followingIDStr, 10, 64)
+
+	if followerID == followingID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "自分をフォローすることはできません"})
+		return
+	}
+
+	var follow models.Follow
+	db := database.DBClient
+	result := db.Where("follower_id = ? AND following_id = ?", followerID, followingID).First(&follow)
+
+	if result.Error == nil {
+		db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Delete(&follow).Error; err != nil {
+				return err
+			}
+			// 💡 カウントを減らす
+			tx.Model(&models.User{}).Where("id = ?", followerID).UpdateColumn("following_count", gorm.Expr("following_count - ?", 1))
+			tx.Model(&models.User{}).Where("id = ?", followingID).UpdateColumn("follower_count", gorm.Expr("follower_count - ?", 1))
+			return nil
+		})
+		c.JSON(http.StatusOK, gin.H{"status": "unfollowed"})
+	} else {
+		// 未フォローならフォロー
+		db.Transaction(func(tx *gorm.DB) error {
+			newFollow := models.Follow{FollowerID: followerID, FollowingID: followingID}
+			if err := tx.Create(&newFollow).Error; err != nil {
+				return err
+			}
+			// 💡 カウントを増やす
+			tx.Model(&models.User{}).Where("id = ?", followerID).UpdateColumn("following_count", gorm.Expr("following_count + ?", 1))
+			tx.Model(&models.User{}).Where("id = ?", followingID).UpdateColumn("follower_count", gorm.Expr("follower_count + ?", 1))
+			return nil
+		})
+
+		// 通知作成
+		var follower models.User
+		db.First(&follower, followerID)
+		noti := models.Notification{
+			UserID:    followingID,
+			Type:      "SYSTEM",
+			Content:   fmt.Sprintf("%sさんにフォローされました", follower.Username),
+			RelatedID: followerID,
+		}
+		db.Create(&noti)
+		BroadcastNotification(followingID, noti)
+
+		c.JSON(http.StatusOK, gin.H{"status": "followed"})
+	}
+}
+
+// GetFollowsHandler フォロー中またはフォロワーの一覧を取得
+func GetFollowsHandler(c *gin.Context) {
+	userID := c.Param("id")
+	mode := c.Query("mode") // "following" or "followers"
+
+	var users []models.User
+	db := database.DBClient
+
+	if mode == "following" {
+		db.Table("users").
+			Joins("JOIN follows ON follows.following_id = users.id").
+			Where("follows.follower_id = ?", userID).
+			Find(&users)
+	} else {
+		db.Table("users").
+			Joins("JOIN follows ON follows.follower_id = users.id").
+			Where("follows.following_id = ?", userID).
+			Find(&users)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"users": users})
+}
+
+// CheckFollowingHandler 特定のユーザーをフォローしているか確認
+func CheckFollowingHandler(c *gin.Context) {
+	followerID := c.GetHeader("X-User-ID")
+	if followerID == "" {
+		c.JSON(http.StatusOK, gin.H{"is_following": false})
+		return
+	}
+	followingID := c.Param("id")
+
+	var count int64
+	database.DBClient.Model(&models.Follow{}).
+		Where("follower_id = ? AND following_id = ?", followerID, followingID).
+		Count(&count)
+
+	c.JSON(http.StatusOK, gin.H{"is_following": count > 0})
 }

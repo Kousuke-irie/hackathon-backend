@@ -6,16 +6,18 @@ import (
 
 // User ユーザー
 type User struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	FirebaseUID string    `gorm:"size:255;uniqueIndex;not null" json:"firebase_uid"`
-	Email       string    `gorm:"size:255;uniqueIndex;not null" json:"email"`
-	Username    string    `json:"username"`
-	IconURL     string    `json:"icon_url"`
-	Bio         string    `json:"bio" gorm:"type:text"`
-	Address     string    `json:"address"`
-	Birthdate   string    `json:"birthdate"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	FirebaseUID    string    `gorm:"size:255;uniqueIndex;not null" json:"firebase_uid"`
+	Email          string    `gorm:"size:255;uniqueIndex;not null" json:"email"`
+	Username       string    `json:"username"`
+	IconURL        string    `json:"icon_url"`
+	Bio            string    `json:"bio" gorm:"type:text"`
+	Address        string    `json:"address"`
+	Birthdate      string    `json:"birthdate"`
+	FollowingCount int       `gorm:"default:0" json:"following_count"`
+	FollowerCount  int       `gorm:"default:0" json:"follower_count"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // Item 商品
@@ -142,4 +144,16 @@ type Notification struct {
 	RelatedID uint64    `json:"related_id"`
 	IsRead    bool      `gorm:"default:false;not null" json:"is_read"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// Follow フォロー関係
+type Follow struct {
+	ID          uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	FollowerID  uint64    `gorm:"not null;index:idx_follow_pair,unique" json:"follower_id"`  // フォローする側
+	FollowingID uint64    `gorm:"not null;index:idx_follow_pair,unique" json:"following_id"` // フォローされる側
+	CreatedAt   time.Time `json:"created_at"`
+
+	// Relations
+	Follower  User `gorm:"foreignKey:FollowerID" json:"follower,omitempty"`
+	Following User `gorm:"foreignKey:FollowingID" json:"following,omitempty"`
 }

@@ -68,6 +68,7 @@ func InitDB() error {
 		&models.Category{},
 		&models.ProductCondition{},
 		&models.Notification{},
+		&models.Follow{},
 	)
 
 	if err != nil {
@@ -82,6 +83,7 @@ func InitDB() error {
 		&models.User{}, &models.Item{}, &models.Transaction{},
 		&models.Like{}, &models.Comment{}, &models.Community{}, &models.CommunityPost{},
 		&models.Category{}, &models.ProductCondition{}, &models.Review{}, &models.Notification{},
+		&models.Follow{},
 	)
 
 	// ▼▼▼ 【修正点2】マイグレーション後に外部キーチェックを有効に戻す ▼▼▼

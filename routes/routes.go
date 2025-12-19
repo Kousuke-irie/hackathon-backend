@@ -16,6 +16,10 @@ func SetupRoutes(r *gin.Engine) {
 	r.PUT("/users/me", handlers.UpdateUserHandler)
 	r.GET("/users/:id", handlers.GetUserByIDHandler)
 
+	r.POST("/users/:id/follow", handlers.ToggleFollowHandler)
+	r.GET("/users/:id/follows", handlers.GetFollowsHandler)
+	r.GET("/users/:id/is-following", handlers.CheckFollowingHandler)
+
 	// 商品
 	items := r.Group("/items")
 	{
