@@ -157,3 +157,23 @@ type Follow struct {
 	Follower  User `gorm:"foreignKey:FollowerID" json:"follower,omitempty"`
 	Following User `gorm:"foreignKey:FollowingID" json:"following,omitempty"`
 }
+
+type ViewHistory struct {
+	ID        uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID    uint64    `gorm:"not null;index" json:"user_id"`
+	ItemID    uint64    `gorm:"not null" json:"item_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Message ダイレクトメッセージ
+type Message struct {
+	ID         uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	SenderID   uint64    `gorm:"not null;index" json:"sender_id"`
+	ReceiverID uint64    `gorm:"not null;index" json:"receiver_id"`
+	Content    string    `gorm:"type:text;not null" json:"content"`
+	IsRead     bool      `gorm:"default:false;not null" json:"is_read"`
+	CreatedAt  time.Time `json:"created_at"`
+
+	Sender   User `gorm:"foreignKey:SenderID" json:"sender,omitempty"`
+	Receiver User `gorm:"foreignKey:ReceiverID" json:"receiver,omitempty"`
+}

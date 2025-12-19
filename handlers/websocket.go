@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
 
+	"github.com/Kousuke-irie/hackathon-backend/database"
 	"github.com/Kousuke-irie/hackathon-backend/models"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -15,7 +17,6 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-// ClientManager は接続中のWebSocketクライアントを管理します
 type ClientManager struct {
 	clients map[uint64]*websocket.Conn
 	mu      sync.Mutex
@@ -25,19 +26,14 @@ var Manager = ClientManager{
 	clients: make(map[uint64]*websocket.Conn),
 }
 
-// WSNotificationHandler WebSocket接続の確立
 func WSNotificationHandler(c *gin.Context) {
 	userIDStr := c.Query("user_id")
 	if userIDStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
 		return
 	}
-	// 文字列からIDへ変換 (エラーチェックは簡略化)
 	var userID uint64
-	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
-		return
-	}
+	fmt.Sscanf(userIDStr, "%d", &userID)
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -49,15 +45,11 @@ func WSNotificationHandler(c *gin.Context) {
 	Manager.clients[userID] = conn
 	Manager.mu.Unlock()
 
-	log.Printf("User %d connected via WebSocket", userID)
-
-	// 接続維持のためのダミーループ
 	defer func() {
 		Manager.mu.Lock()
 		delete(Manager.clients, userID)
 		Manager.mu.Unlock()
 		conn.Close()
-		log.Printf("User %d disconnected", userID)
 	}()
 
 	for {
@@ -67,7 +59,50 @@ func WSNotificationHandler(c *gin.Context) {
 	}
 }
 
-// BroadcastNotification 特定のユーザーに通知をリアルタイム送信
+// BroadcastChatMessage メッセージを特定の相手にリアルタイム転送
+func BroadcastChatMessage(receiverID uint64, msg models.Message) {
+	Manager.mu.Lock()
+	conn, ok := Manager.clients[receiverID]
+	Manager.mu.Unlock()
+
+	if ok {
+		// フロントエンドが識別しやすいように型を付けて送信
+		payload := gin.H{
+			"type":    "CHAT_MESSAGE",
+			"message": msg,
+		}
+		if err := conn.WriteJSON(payload); err != nil {
+			conn.Close()
+			Manager.mu.Lock()
+			delete(Manager.clients, receiverID)
+			Manager.mu.Unlock()
+		}
+	}
+}
+
+// PostMessageHandler メッセージをDB保存し、WSで送信
+func PostMessageHandler(c *gin.Context) {
+	var msg models.Message
+	if err := c.ShouldBindJSON(&msg); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	senderIDStr := c.GetHeader("X-User-ID")
+	senderID, _ := strconv.ParseUint(senderIDStr, 10, 64)
+	msg.SenderID = senderID
+
+	if err := database.DBClient.Create(&msg).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save message"})
+		return
+	}
+
+	// 相手がオンラインならWSで即時送信
+	BroadcastChatMessage(msg.ReceiverID, msg)
+
+	c.JSON(http.StatusOK, gin.H{"message": msg})
+}
+
 func BroadcastNotification(userID uint64, notification models.Notification) {
 	Manager.mu.Lock()
 	conn, ok := Manager.clients[userID]
@@ -75,7 +110,6 @@ func BroadcastNotification(userID uint64, notification models.Notification) {
 
 	if ok {
 		if err := conn.WriteJSON(notification); err != nil {
-			log.Printf("Failed to send WS message to user %d: %v", userID, err)
 			conn.Close()
 			Manager.mu.Lock()
 			delete(Manager.clients, userID)

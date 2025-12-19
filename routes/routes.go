@@ -19,6 +19,7 @@ func SetupRoutes(r *gin.Engine) {
 	r.POST("/users/:id/follow", handlers.ToggleFollowHandler)
 	r.GET("/users/:id/follows", handlers.GetFollowsHandler)
 	r.GET("/users/:id/is-following", handlers.CheckFollowingHandler)
+	r.GET("/users/:id/reviews", handlers.GetUserReviewsHandler)
 
 	// 商品
 	items := r.Group("/items")
@@ -34,6 +35,7 @@ func SetupRoutes(r *gin.Engine) {
 		items.POST("/:id/sold", handlers.CompletePurchaseAndCreateTransactionHandler)
 		items.GET("/by-ids", handlers.GetItemsByIdsHandler)
 		items.GET("/:id/liked", handlers.CheckItemLikedHandler)
+		items.POST("/:id/view", handlers.RecordViewHandler)
 	}
 
 	// 自分の出品
@@ -70,6 +72,13 @@ func SetupRoutes(r *gin.Engine) {
 		comm.DELETE("/:id", handlers.DeleteCommunityHandler)
 		comm.GET("/:id/posts", handlers.GetCommunityPostsHandler)
 		comm.POST("/:id/posts", handlers.PostToCommunityHandler)
+	}
+
+	chats := r.Group("/chats")
+	{
+		chats.GET("/threads", handlers.GetChatThreadsHandler) // スレッド一覧
+		chats.GET("/:userId", handlers.GetChatHistoryHandler) // 特定相手との履歴
+		chats.POST("", handlers.PostMessageHandler)           // メッセージ送信
 	}
 
 	// ▼▼▼ メタデータ関連 API ▼▼▼

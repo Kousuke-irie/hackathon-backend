@@ -233,3 +233,25 @@ func CheckFollowingHandler(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"is_following": count > 0})
 }
+
+// GetUserReviewsHandler 特定ユーザー宛の評価一覧を取得
+func GetUserReviewsHandler(c *gin.Context) {
+	userID := c.Param("id")
+	var reviews []models.Review
+	
+	err := database.DBClient.
+		Preload("Rater").
+		Preload("Transaction.Item").
+		Joins("JOIN transactions ON transactions.id = reviews.transaction_id").
+		// 出品者としての評価、または購入者としての評価の両方を取得
+		// (評価者が自分ではない ＝ 自分が評価された側)
+		Where("(transactions.seller_id = ? OR transactions.buyer_id = ?) AND reviews.rater_id != ?", userID, userID, userID).
+		Order("reviews.created_at DESC").
+		Find(&reviews).Error
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "評価の取得に失敗しました"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"reviews": reviews})
+}
