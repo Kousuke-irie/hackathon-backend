@@ -36,6 +36,7 @@ func SetupRoutes(r *gin.Engine) {
 		items.GET("/by-ids", handlers.GetItemsByIdsHandler)
 		items.GET("/:id/liked", handlers.CheckItemLikedHandler)
 		items.POST("/:id/view", handlers.RecordViewHandler)
+		items.POST("/generate-message", handlers.GenerateAIChatMessageHandler)
 	}
 
 	// 自分の出品
@@ -85,6 +86,7 @@ func SetupRoutes(r *gin.Engine) {
 	r.GET("/meta/categories", handlers.GetCategoriesHandler)
 	r.GET("/meta/conditions", handlers.GetConditionsHandler)
 	r.GET("/meta/categories/tree", handlers.GetCategoryTreeHandler)
+	r.POST("/meta/ai-chat", handlers.AIChatConciergeHandler)
 
 	// ▼▼▼  取引関連 API ▼▼▼
 	tx := r.Group("/transactions")

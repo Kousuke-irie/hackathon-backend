@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/Kousuke-irie/hackathon-backend/database"
+	"github.com/Kousuke-irie/hackathon-backend/gemini"
 	"github.com/Kousuke-irie/hackathon-backend/models"
 	"github.com/gin-gonic/gin"
 )
@@ -42,4 +44,24 @@ func GetConditionsHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"conditions": conditions})
+}
+
+func AIChatConciergeHandler(c *gin.Context) {
+	var req struct {
+		Query string `json:"query" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "質問内容を入力してください"})
+		return
+	}
+
+	// backend/gemini/client.go で定義した関数を呼び出す
+	answer, err := gemini.ChatWithConcierge(c.Request.Context(), req.Query)
+	if err != nil {
+		fmt.Printf("AI Concierge Error: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "AIコンシェルジュが一時的に応答できません"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"answer": answer})
 }
