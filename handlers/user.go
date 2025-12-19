@@ -10,10 +10,12 @@ import (
 
 // UpdateUserRequest ユーザー更新用リクエスト
 type UpdateUserRequest struct {
-	ID       uint64 `json:"id" binding:"required"` // ユーザーID
-	Username string `json:"username"`
-	Bio      string `json:"bio"`
-	IconURL  string `json:"icon_url"`
+	ID        uint64 `json:"id" binding:"required"`
+	Username  string `json:"username"`
+	Bio       string `json:"bio"`
+	IconURL   string `json:"icon_url"`
+	Address   string `json:"address"`   // 追加
+	Birthdate string `json:"birthdate"` // 追加
 }
 
 // UpdateUserHandler ユーザー情報（プロフィール）を更新
@@ -36,6 +38,8 @@ func UpdateUserHandler(c *gin.Context) {
 	// 情報の更新
 	user.Username = req.Username
 	user.Bio = req.Bio
+	user.Address = req.Address     // 追加
+	user.Birthdate = req.Birthdate // 追加
 
 	if req.IconURL != "" && req.IconURL != user.IconURL {
 		user.IconURL = req.IconURL
@@ -114,4 +118,18 @@ func GetMyPurchaseHistoryHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"transactions": transactions})
+}
+
+// GetUserByIDHandler ユーザー詳細を取得
+func GetUserByIDHandler(c *gin.Context) {
+	userID := c.Param("id")
+	var user models.User
+
+	// 💡 セキュリティのため、Emailなど非公開にすべき情報は返さないように調整
+	if err := database.DBClient.Select("id, username, icon_url, bio, created_at").First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"user": user})
 }

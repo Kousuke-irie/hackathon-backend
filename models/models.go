@@ -6,12 +6,14 @@ import (
 
 // User ユーザー
 type User struct {
-	ID          uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	FirebaseUID string    `gorm:"type:varchar(255);uniqueIndex;not null" json:"firebase_uid"`
-	Username    string    `gorm:"type:varchar(255);not null" json:"username"`
-	Email       string    `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
-	IconURL     string    `gorm:"type:text" json:"icon_url"`
-	Bio         string    `gorm:"type:text" json:"bio"`
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	FirebaseUID string    `gorm:"uniqueIndex;not null" json:"firebase_uid"`
+	Email       string    `gorm:"uniqueIndex;not null" json:"email"` // 💡 追加
+	Username    string    `json:"username"`
+	IconURL     string    `json:"icon_url"`
+	Bio         string    `json:"bio" gorm:"type:text"` // 💡 自己紹介
+	Address     string    `json:"address"`              // 💡 住所
+	Birthdate   string    `json:"birthdate"`            // 💡 生年月日
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

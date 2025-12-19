@@ -2,23 +2,21 @@ package handlers
 
 import (
 	"context"
-	"errors" // ★ 追加が必要
-	"fmt"
+	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/Kousuke-irie/hackathon-backend/database"
 	"github.com/Kousuke-irie/hackathon-backend/firebase"
 	"github.com/Kousuke-irie/hackathon-backend/models"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm" // gorm.ErrRecordNotFound を使うために必要
+	"gorm.io/gorm"
 )
 
-// LoginRequest フロントエンドから送られてくるデータ型（再定義）
 type LoginRequest struct {
 	IDToken string `json:"id_token" binding:"required"`
 }
 
-// LoginHandler ログインおよび新規ユーザー登録 (Upsert) を処理
 func LoginHandler(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -35,40 +33,45 @@ func LoginHandler(c *gin.Context) {
 
 	// 2. トークンから情報取得
 	firebaseUID := token.UID
-	email := token.Claims["email"].(string)
-	name, _ := token.Claims["name"].(string)
-	picture, _ := token.Claims["picture"].(string)
+	email, _ := token.Claims["email"].(string)
 
-	// 3. 堅牢な Upsert ロジック
+	// 💡 Googleログイン以外では名前や画像が空になるため、デフォルト値を設定
+	name, _ := token.Claims["name"].(string)
+	if name == "" && email != "" {
+		name = strings.Split(email, "@")[0] // メアドの@前を仮の名前にする
+	}
+
+	picture, _ := token.Claims["picture"].(string)
+	if picture == "" {
+		picture = "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y" // デフォルトアイコン
+	}
+
+	// 3. Upsert ロジック
 	var user models.User
 	db := database.DBClient
 
-	// A. まず Firebase UID で検索
 	result := db.Where("firebase_uid = ?", firebaseUID).First(&user)
 
 	if result.Error == nil {
-		// B1. UIDで見つかった場合 -> 既存ユーザーとして情報更新
+		// 既存ユーザーの更新（ログインごとに最新情報を反映）
 		user.Email = email
-		user.Username = name
-		user.IconURL = picture
+		if user.Username == "" {
+			user.Username = name
+		} // 名前がなければ更新
 		db.Save(&user)
 	} else if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-
-		// B2. UIDで見つからなかった場合 -> Emailで再検索
+		// メアドで既存ユーザーを検索（UID未紐付け対策）
 		emailResult := db.Where("email = ?", email).First(&user)
 
 		if emailResult.Error == nil {
-			// C1. Emailで見つかった場合 -> 既存ユーザーにUIDを紐付け（Link Firebase UID）
-			user.FirebaseUID = firebaseUID // UIDを登録し直す
+			user.FirebaseUID = firebaseUID
 			user.Email = email
-			user.Username = name
-			user.IconURL = picture
-			if err := db.Save(&user).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link UID to existing user"})
-				return
+			if user.Username == "" {
+				user.Username = name
 			}
+			db.Save(&user)
 		} else if errors.Is(emailResult.Error, gorm.ErrRecordNotFound) {
-			// C2. UIDもEmailも見つからない場合 -> 完全に新規作成
+			// 完全新規作成
 			user = models.User{
 				FirebaseUID: firebaseUID,
 				Email:       email,
@@ -80,17 +83,14 @@ func LoginHandler(c *gin.Context) {
 				return
 			}
 		} else {
-			// C3. Email検索でその他のエラー
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Database error during email check: %v", emailResult.Error)})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error during email check"})
 			return
 		}
 	} else {
-		// B3. UID検索でその他のエラー
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Database error during UID check: %v", result.Error)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error during UID check"})
 		return
 	}
 
-	// 最終結果を返す
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Login successful",
 		"user":    user,

@@ -14,6 +14,7 @@ func SetupRoutes(r *gin.Engine) {
 	// 認証
 	r.POST("/login", handlers.LoginHandler)
 	r.PUT("/users/me", handlers.UpdateUserHandler)
+	r.GET("/users/:id", handlers.GetUserByIDHandler)
 
 	// 商品
 	items := r.Group("/items")
