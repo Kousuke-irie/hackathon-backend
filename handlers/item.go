@@ -59,8 +59,8 @@ func CreateItemHandler(c *gin.Context) {
 	}
 
 	// ★ 画像URLが必須のチェック
-	if req.Status != "DRAFT" && req.ImageURL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Image URL is required for ON_SALE items"})
+	if req.Status != "DRAFT" && (req.ImageURL == "" || req.ImageURL == "[]") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "At least one image is required for ON_SALE items"})
 		return
 	}
 
@@ -133,14 +133,17 @@ func AnalyzeItemHandler(c *gin.Context) {
 		return
 	}
 
-	if _, exists := validCategoryIDs[aiResult.CategoryID]; !exists {
-		// 🚨 強制修正: IDを「その他」（ID 16）に設定し直す
-		// (ID 16はご提示のデータで「その他」のトップレベルIDだが、ここでは子カテゴリの「ジャンル不明」IDを使うのが理想)
-		// 暫定的に、最も具体的な子カテゴリID (例: DBに存在する最大のID) か、ユーザーが設定した「その他」のIDを使用。
-		// ここでは、CategoryIDを0に設定して、フロント側で「その他」の初期値を適用させるロジックに変更します。
-		aiResult.CategoryID = 0                        // 無効なIDを0に設定
-		aiResult.Title = "【カテゴリ要確認】 " + aiResult.Title // タイトルにフラグを立ててユーザーに注意を促す
-		fmt.Printf("Warning: AI returned invalid Category ID. Title set to: %s\n", aiResult.Title)
+	// 💡 デバッグ用: AIが何を返したかログに出す
+	fmt.Printf("AI returned CategoryID: %d for Title: %s\n", aiResult.CategoryID, aiResult.Title)
+
+	// カテゴリIDの存在確認
+	var count int64
+	database.DBClient.Model(&models.Category{}).Where("id = ?", aiResult.CategoryID).Count(&count)
+
+	if count == 0 {
+		// AIが全く存在しないIDを返した場合のみ 0 にする
+		fmt.Printf("Warning: AI returned non-existent Category ID: %d\n", aiResult.CategoryID)
+		aiResult.CategoryID = 0
 	}
 
 	// 3. 結果をJSONで返す
@@ -150,33 +153,57 @@ func AnalyzeItemHandler(c *gin.Context) {
 	})
 }
 
-// GetItemListHandler 全ての販売中の商品を取得するAPI
 func GetItemListHandler(c *gin.Context) {
 	queryParam := c.Query("q")
+	categoryIDStr := c.Query("category_id") // フロントから渡されるカテゴリID
+	conditionName := c.Query("condition")
+	sortBy := c.Query("sort_by")
+	sortOrder := c.Query("sort_order")
+	userID := c.Query("user_id")
 
 	var items []models.Item
 	db := database.DBClient
 
-	// 自身が出品した商品を除く（スワイプと同じ条件を踏襲）
-	userID := c.Query("user_id") // フロントエンドからクエリパラメータでユーザーIDを受け取る
-
-	// 販売中で、かつ自身が出品していない商品を取得
 	query := db.Where("status = ?", "ON_SALE")
 
 	if userID != "" {
 		query = query.Where("seller_id != ?", userID)
 	}
 
-	// 2. ▼ キーワード検索 (Full-Text Search / Simple LIKE) ▼
+	// 💡 カテゴリ絞り込みの強化
+	if categoryIDStr != "" {
+		catID, _ := strconv.ParseUint(categoryIDStr, 10, 64)
+		// 子カテゴリのIDリストを取得
+		var subCategoryIDs []uint
+		database.DBClient.Model(&models.Category{}).
+			Where("id = ? OR parent_id = ?", catID, catID).
+			Pluck("id", &subCategoryIDs)
+
+		query = query.Where("category_id IN (?)", subCategoryIDs)
+	}
+
+	if conditionName != "" {
+		query = query.Where("condition = ?", conditionName)
+	}
+
 	if queryParam != "" {
 		searchQuery := fmt.Sprintf("%%%s%%", queryParam)
-		// title OR description で LIKE 検索
 		query = query.Where("title LIKE ? OR description LIKE ?", searchQuery, searchQuery)
 	}
 
-	// 最新の20件を返す（ページネーションは一旦省略）
-	if err := query.Order("created_at DESC").Limit(20).Find(&items).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch item list"})
+	// 並び替えの適用
+	order := "DESC"
+	if sortOrder == "asc" {
+		order = "ASC"
+	}
+	sortCol := "created_at"
+	if sortBy == "price" {
+		sortCol = "price"
+	}
+	query = query.Order(fmt.Sprintf("%s %s", sortCol, order))
+
+	if err := query.Preload("Seller").Limit(40).Find(&items).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch items"})
 		return
 	}
 
@@ -200,48 +227,28 @@ func GetItemDetailHandler(c *gin.Context) {
 
 // GetMyItemsHandler ログインユーザーが出品した商品のみを取得
 func GetMyItemsHandler(c *gin.Context) {
-	// ユーザーID（自分の出品除外用）
 	userID := c.GetHeader("X-User-ID")
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 
-	// ▼▼▼ 追加: クエリパラメータの取得 ▼▼▼
-	categoryID := c.Query("category_id")
-	conditionName := c.Query("condition")
-	sortBy := c.Query("sort_by")       // 例: "price" or "created_at"
-	sortOrder := c.Query("sort_order") // 例: "asc" or "desc"
-	// ▲▲▲ 追加 ▲▲▲
+	// クエリパラメータからステータスを取得 (デフォルトは ON_SALE)
+	statusFilter := c.Query("status")
+	if statusFilter == "" {
+		statusFilter = "ON_SALE"
+	}
 
 	var items []models.Item
 	db := database.DBClient
 
-	query := db.Where("seller_id = ?", userID).Where("status = ?", "ON_SALE")
+	// ステータスでフィルタリングするようにクエリを構成
+	query := db.Where("seller_id = ? AND status = ?", userID, statusFilter)
 
-	// 2. ▼ 絞り込み (Filtering) ▼
-	if categoryID != "" {
-		query = query.Where("category_id = ?", categoryID)
-	}
-	if conditionName != "" {
-		query = query.Where("condition = ?", conditionName)
-	}
+	// 並び替えなどは既存のロジックを維持
+	query = query.Order("created_at DESC")
 
-	// 3. ▼ 並び替え (Sorting) ▼
-	if sortBy != "" {
-		order := "DESC" // デフォルトは降順
-		if sortOrder == "asc" {
-			order = "ASC"
-		}
-		// GORMで安全に並び替えを適用
-		query = query.Order(fmt.Sprintf("%s %s", sortBy, order))
-	} else {
-		// デフォルトの並び替え
-		query = query.Order("created_at DESC")
-	}
-
-	// 4. 実行
-	if err := query.Limit(20).Find(&items).Error; err != nil {
+	if err := query.Limit(40).Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch item list"})
 		return
 	}
@@ -263,6 +270,7 @@ type UpdateItemRequest struct {
 // UpdateItemHandler 商品情報を更新 (PUT /items/:id)
 func UpdateItemHandler(c *gin.Context) {
 	itemID := c.Param("id")
+	userID := c.GetHeader("X-User-ID")
 
 	var req ItemDataRequest // JSONとして受け取る
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -275,8 +283,6 @@ func UpdateItemHandler(c *gin.Context) {
 	shippingFee, _ := strconv.Atoi(req.ShippingFee)
 	categoryID, _ := strconv.ParseUint(req.CategoryID, 10, 32)
 
-	// 💡 注意: 編集時は seller_id はフォームから受け取る必要はありません
-
 	// 3. 商品の存在確認と権限チェック
 	db := database.DBClient
 	var item models.Item
@@ -286,9 +292,15 @@ func UpdateItemHandler(c *gin.Context) {
 		return
 	}
 
-	// 4. 取引中の商品編集をブロックするロジック (既存のガード)
-	if item.Status != "ON_SALE" && item.Status != "DRAFT" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Item cannot be edited when it is SOLD or currently in a transaction."})
+	// 💡 権限チェック: 出品者本人以外は編集不可
+	if strconv.FormatUint(item.SellerID, 10) != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You do not have permission to edit this item"})
+		return
+	}
+
+	// 💡 取引中(SOLD)以外は編集可能にする
+	if item.Status == "SOLD" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Sold items cannot be edited"})
 		return
 	}
 
@@ -297,7 +309,7 @@ func UpdateItemHandler(c *gin.Context) {
 		"Title":         req.Title,
 		"Description":   req.Description,
 		"Price":         price,
-		"ImageURL":      req.ImageURL, // ★ JSONから取得したGCS URLを使用
+		"image_url":     req.ImageURL, // ★ JSONから取得したGCS URLを使用
 		"CategoryID":    uint(categoryID),
 		"Condition":     req.Condition,
 		"ShippingPayer": req.ShippingPayer,
@@ -375,7 +387,7 @@ func GetMyPurchasesInProgressHandler(c *gin.Context) {
 	inProgressStatuses := []string{"PURCHASED", "SHIPPED", "RECEIVED"}
 
 	if err := db.
-		Preload("Item").        // 関連する商品情報を取得
+		Preload("Item"). // 関連する商品情報を取得
 		Preload("Item.Seller"). // 商品の出品者情報も取得
 		Where("buyer_id = ?", userID).
 		Where("status IN (?)", inProgressStatuses).
@@ -423,4 +435,58 @@ func GetGcsUploadUrlHandler(c *gin.Context) {
 		"uploadUrl": signedURL,
 		"imageUrl":  imageURL,
 	})
+}
+
+// GetMySalesInProgressHandler 自分が「販売した」取引中の商品一覧を取得 (出品者用)
+func GetMySalesInProgressHandler(c *gin.Context) {
+	userID := c.GetHeader("X-User-ID")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
+
+	var transactions []models.Transaction
+	db := database.DBClient
+
+	// 💡 SellerID が自分で、ステータスが完了・キャンセル以外を抽出
+	inProgressStatuses := []string{"PURCHASED", "SHIPPED", "RECEIVED"}
+
+	if err := db.
+		Preload("Item").
+		Preload("Buyer").
+		Where("seller_id = ? AND status IN (?)", userID, inProgressStatuses).
+		Order("created_at DESC").
+		Find(&transactions).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sales in progress"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"transactions": transactions})
+}
+
+// GetMySalesHistoryHandler 自分が「販売した」完了済みの取引一覧を取得 (出品者用)
+func GetMySalesHistoryHandler(c *gin.Context) {
+	userID := c.GetHeader("X-User-ID")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
+
+	var transactions []models.Transaction
+	db := database.DBClient
+
+	// 💡 ステータスが完了(COMPLETED)または受取済(RECEIVED)のものを抽出
+	completedStatuses := []string{"COMPLETED", "RECEIVED"}
+
+	if err := db.
+		Preload("Item").
+		Preload("Buyer").
+		Where("seller_id = ? AND status IN (?)", userID, completedStatuses).
+		Order("created_at DESC").
+		Find(&transactions).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sales history"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"transactions": transactions})
 }

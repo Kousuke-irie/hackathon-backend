@@ -39,6 +39,8 @@ func SetupRoutes(r *gin.Engine) {
 		my.GET("/drafts", handlers.GetMyDraftsHandler)
 		my.GET("/purchases", handlers.GetMyPurchaseHistoryHandler)
 		my.GET("/in-progress", handlers.GetMyPurchasesInProgressHandler)
+		my.GET("/sales-in-progress", handlers.GetMySalesInProgressHandler)
+		my.GET("/sales-history", handlers.GetMySalesHistoryHandler)
 	}
 
 	// スワイプ
@@ -70,6 +72,7 @@ func SetupRoutes(r *gin.Engine) {
 	// ▼▼▼  取引関連 API ▼▼▼
 	tx := r.Group("/transactions")
 	{
+		tx.GET("/:tx_id", handlers.GetTransactionDetailHandler)
 		tx.PUT("/:tx_id/status", handlers.UpdateTransactionStatusHandler) // ステータス更新
 		tx.POST("/:tx_id/review", handlers.PostReviewHandler)             // 評価投稿
 		tx.POST("/:tx_id/cancel", handlers.CancelTransactionHandler)

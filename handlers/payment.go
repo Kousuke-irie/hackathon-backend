@@ -117,7 +117,7 @@ func CompletePurchaseAndCreateTransactionHandler(c *gin.Context) {
 		UserID:    item.SellerID,
 		Type:      "SOLD",
 		Content:   fmt.Sprintf("祝！「%s」が購入されました。発送準備をお願いします", item.Title),
-		RelatedID: item.ID,
+		RelatedID: newTx.ID,
 	}
 	database.DBClient.Create(&noti)
 	BroadcastNotification(item.SellerID, noti)
