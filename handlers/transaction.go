@@ -8,6 +8,7 @@ import (
 	"github.com/Kousuke-irie/hackathon-backend/database"
 	"github.com/Kousuke-irie/hackathon-backend/models"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type PostReviewRequest struct {
@@ -61,7 +62,7 @@ func UpdateTransactionStatusHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Status updated", "new_status": req.NewStatus})
 }
 
-// PostReviewHandler 評価を投稿し、取引ステータスを更新（受け取り完了）
+// PostReviewHandler 評価を投稿し、取引ステータスを更新
 func PostReviewHandler(c *gin.Context) {
 	txIDStr := c.Param("tx_id")
 	txID, err := strconv.ParseUint(txIDStr, 10, 64)
@@ -78,26 +79,33 @@ func PostReviewHandler(c *gin.Context) {
 
 	db := database.DBClient
 
-	newReview := models.Review{
-		TransactionID: txID,
-		RaterID:       req.RaterID,
-		Rating:        req.Rating,
-		Comment:       req.Comment,
-		Role:          req.Role,
-	}
+	// 💡 トランザクション処理を導入してデータの整合性を保証する
+	err = db.Transaction(func(dbTx *gorm.DB) error {
+		// 1. レビューの作成
+		newReview := models.Review{
+			TransactionID: txID,
+			RaterID:       req.RaterID,
+			Rating:        req.Rating,
+			Comment:       req.Comment,
+			Role:          req.Role,
+		}
+		if err := dbTx.Create(&newReview).Error; err != nil {
+			return err
+		}
 
-	if err := db.Create(&newReview).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to post review"})
-		return
-	}
+		// 2. 取引ステータスの更新
+		if err := dbTx.Model(&models.Transaction{}).
+			Where("id = ?", txID).
+			Update("status", "RECEIVED").Error; err != nil {
+			return err
+		}
 
-	// 3. 取引ステータスを 'RECEIVED' または 'COMPLETED' に更新 (ここでは 'RECEIVED' にする)
-	// 💡 注意: 相手側も評価を完了すると 'COMPLETED' に遷移させるのが理想的ですが、
-	//          今回は購入者の評価をもって一旦 'RECEIVED' とします。
-	if err := db.Model(&models.Transaction{}).
-		Where("id = ?", txID).
-		Update("Status", "RECEIVED").Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update transaction status"})
+		return nil
+	})
+
+	if err != nil {
+		fmt.Printf("Review Error: %v\n", err) // サーバーログにエラーを出力
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to post review and update status"})
 		return
 	}
 
