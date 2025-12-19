@@ -511,7 +511,7 @@ func GetFollowingItemsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
-// GetCategoryRecommendationsHandler 最近の「閲覧履歴」カテゴリからおすすめを取得
+// GetCategoryRecommendationsHandler AIを使用してrecommend
 func GetCategoryRecommendationsHandler(c *gin.Context) {
 	userID := c.GetHeader("X-User-ID")
 	if userID == "" {
@@ -519,27 +519,41 @@ func GetCategoryRecommendationsHandler(c *gin.Context) {
 		return
 	}
 
-	var lastCategoryID uint
-	// 💡 閲覧履歴(view_histories)から最新の商品カテゴリを取得
+	// 1. 直近5件の閲覧履歴から商品のタイトルを取得
+	var recentItemTitles []string
 	err := database.DBClient.Table("view_histories").
-		Select("items.category_id").
+		Select("items.title").
 		Joins("JOIN items ON items.id = view_histories.item_id").
 		Where("view_histories.user_id = ?", userID).
 		Order("view_histories.created_at DESC").
-		Limit(1).
-		Pluck("category_id", &lastCategoryID).Error
+		Limit(5).
+		Pluck("title", &recentItemTitles).Error
 
-	if err != nil || lastCategoryID == 0 {
+	if err != nil || len(recentItemTitles) == 0 {
 		c.JSON(http.StatusOK, gin.H{"items": []models.Item{}})
 		return
 	}
 
-	var items []models.Item
-	database.DBClient.
-		Where("category_id = ? AND seller_id != ? AND status = ?", lastCategoryID, userID, "ON_SALE").
-		Order("created_at DESC").Limit(10).Find(&items)
+	// 2. Geminiにユーザーの興味キーワードを分析させる
+	keyword, err := gemini.AnalyzeUserInterest(c.Request.Context(), recentItemTitles)
+	if err != nil {
+		fmt.Printf("AI Analysis Error: %v\n", err)
+		// AIが失敗した場合は従来通りカテゴリベースのフォールバック等の処理（省略）
+		c.JSON(http.StatusOK, gin.H{"items": []models.Item{}})
+		return
+	}
 
-	c.JSON(http.StatusOK, gin.H{"items": items})
+	// 3. AIが抽出したキーワードで商品を検索（自分以外、販売中）
+	var recommendedItems []models.Item
+	searchQuery := fmt.Sprintf("%%%s%%", keyword)
+	database.DBClient.
+		Where("(title LIKE ? OR description LIKE ?) AND seller_id != ? AND status = ?",
+			searchQuery, searchQuery, userID, "ON_SALE").
+		Order("created_at DESC").
+		Limit(10).
+		Find(&recommendedItems)
+
+	c.JSON(http.StatusOK, gin.H{"items": recommendedItems})
 }
 
 // GetRecommendedUsersHandler おすすめのアカウント（共通のカテゴリを出品している人など）
@@ -570,4 +584,22 @@ func RecordViewHandler(c *gin.Context) {
 	database.DBClient.Create(&history)
 
 	c.JSON(http.StatusOK, gin.H{"status": "recorded"})
+}
+
+func GenerateAIChatMessageHandler(c *gin.Context) {
+	var req struct {
+		Intent string `json:"intent" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "意図を入力してください"})
+		return
+	}
+
+	message, err := gemini.GenerateTransactionMessage(c.Request.Context(), req.Intent)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "メッセージの生成に失敗しました"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": message})
 }
