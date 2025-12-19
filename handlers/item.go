@@ -424,3 +424,30 @@ func GetGcsUploadUrlHandler(c *gin.Context) {
 		"imageUrl":  imageURL,
 	})
 }
+
+// GetMySalesInProgressHandler 自分が「販売した」取引中の商品一覧を取得 (出品者用)
+func GetMySalesInProgressHandler(c *gin.Context) {
+	userID := c.GetHeader("X-User-ID")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
+
+	var transactions []models.Transaction
+	db := database.DBClient
+
+	// 💡 SellerID が自分で、ステータスが完了・キャンセル以外を抽出
+	inProgressStatuses := []string{"PURCHASED", "SHIPPED", "RECEIVED"}
+
+	if err := db.
+		Preload("Item").
+		Preload("Buyer").
+		Where("seller_id = ? AND status IN (?)", userID, inProgressStatuses).
+		Order("created_at DESC").
+		Find(&transactions).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sales in progress"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"transactions": transactions})
+}
