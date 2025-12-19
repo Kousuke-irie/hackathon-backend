@@ -40,6 +40,7 @@ func SetupRoutes(r *gin.Engine) {
 		my.GET("/purchases", handlers.GetMyPurchaseHistoryHandler)
 		my.GET("/in-progress", handlers.GetMyPurchasesInProgressHandler)
 		my.GET("/sales-in-progress", handlers.GetMySalesInProgressHandler)
+		my.GET("/sales-history", handlers.GetMySalesHistoryHandler)
 	}
 
 	// スワイプ

@@ -59,8 +59,8 @@ func CreateItemHandler(c *gin.Context) {
 	}
 
 	// ★ 画像URLが必須のチェック
-	if req.Status != "DRAFT" && req.ImageURL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Image URL is required for ON_SALE items"})
+	if req.Status != "DRAFT" && (req.ImageURL == "" || req.ImageURL == "[]") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "At least one image is required for ON_SALE items"})
 		return
 	}
 
@@ -309,7 +309,7 @@ func UpdateItemHandler(c *gin.Context) {
 		"Title":         req.Title,
 		"Description":   req.Description,
 		"Price":         price,
-		"ImageURL":      req.ImageURL, // ★ JSONから取得したGCS URLを使用
+		"image_url":     req.ImageURL, // ★ JSONから取得したGCS URLを使用
 		"CategoryID":    uint(categoryID),
 		"Condition":     req.Condition,
 		"ShippingPayer": req.ShippingPayer,
@@ -387,7 +387,7 @@ func GetMyPurchasesInProgressHandler(c *gin.Context) {
 	inProgressStatuses := []string{"PURCHASED", "SHIPPED", "RECEIVED"}
 
 	if err := db.
-		Preload("Item").        // 関連する商品情報を取得
+		Preload("Item"). // 関連する商品情報を取得
 		Preload("Item.Seller"). // 商品の出品者情報も取得
 		Where("buyer_id = ?", userID).
 		Where("status IN (?)", inProgressStatuses).
@@ -458,6 +458,33 @@ func GetMySalesInProgressHandler(c *gin.Context) {
 		Order("created_at DESC").
 		Find(&transactions).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sales in progress"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"transactions": transactions})
+}
+
+// GetMySalesHistoryHandler 自分が「販売した」完了済みの取引一覧を取得 (出品者用)
+func GetMySalesHistoryHandler(c *gin.Context) {
+	userID := c.GetHeader("X-User-ID")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
+
+	var transactions []models.Transaction
+	db := database.DBClient
+
+	// 💡 ステータスが完了(COMPLETED)または受取済(RECEIVED)のものを抽出
+	completedStatuses := []string{"COMPLETED", "RECEIVED"}
+
+	if err := db.
+		Preload("Item").
+		Preload("Buyer").
+		Where("seller_id = ? AND status IN (?)", userID, completedStatuses).
+		Order("created_at DESC").
+		Find(&transactions).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sales history"})
 		return
 	}
 
