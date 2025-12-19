@@ -7,13 +7,13 @@ import (
 // User ユーザー
 type User struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
-	FirebaseUID string    `gorm:"uniqueIndex;not null" json:"firebase_uid"`
-	Email       string    `gorm:"uniqueIndex;not null" json:"email"` // 💡 追加
+	FirebaseUID string    `gorm:"size:255;uniqueIndex;not null" json:"firebase_uid"`
+	Email       string    `gorm:"size:255;uniqueIndex;not null" json:"email"`
 	Username    string    `json:"username"`
 	IconURL     string    `json:"icon_url"`
-	Bio         string    `json:"bio" gorm:"type:text"` // 💡 自己紹介
-	Address     string    `json:"address"`              // 💡 住所
-	Birthdate   string    `json:"birthdate"`            // 💡 生年月日
+	Bio         string    `json:"bio" gorm:"type:text"`
+	Address     string    `json:"address"`
+	Birthdate   string    `json:"birthdate"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
