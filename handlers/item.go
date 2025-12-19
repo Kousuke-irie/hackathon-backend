@@ -160,11 +160,19 @@ func GetItemListHandler(c *gin.Context) {
 	sortBy := c.Query("sort_by")
 	sortOrder := c.Query("sort_order")
 	userID := c.Query("user_id")
+	sellerID := c.Query("seller_id")
 
 	var items []models.Item
 	db := database.DBClient
 
 	query := db.Where("status = ?", "ON_SALE")
+
+	if sellerID != "" {
+		query = query.Where("seller_id = ?", sellerID)
+	} else if userID != "" {
+		// 通常の一覧では自分以外を出す
+		query = query.Where("seller_id != ?", userID)
+	}
 
 	if userID != "" {
 		query = query.Where("seller_id != ?", userID)
@@ -387,7 +395,7 @@ func GetMyPurchasesInProgressHandler(c *gin.Context) {
 	inProgressStatuses := []string{"PURCHASED", "SHIPPED", "RECEIVED"}
 
 	if err := db.
-		Preload("Item"). // 関連する商品情報を取得
+		Preload("Item").        // 関連する商品情報を取得
 		Preload("Item.Seller"). // 商品の出品者情報も取得
 		Where("buyer_id = ?", userID).
 		Where("status IN (?)", inProgressStatuses).
@@ -489,4 +497,77 @@ func GetMySalesHistoryHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"transactions": transactions})
+}
+
+// GetFollowingItemsHandler フォロー中ユーザーの出品を取得
+func GetFollowingItemsHandler(c *gin.Context) {
+	userID := c.GetHeader("X-User-ID")
+	var items []models.Item
+	// サブクエリでフォロー中のIDを抽出し、それらの最新出品を取得
+	database.DBClient.
+		Joins("JOIN follows ON follows.following_id = items.seller_id").
+		Where("follows.follower_id = ? AND items.status = ?", userID, "ON_SALE").
+		Order("items.created_at DESC").Limit(10).Find(&items)
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+// GetCategoryRecommendationsHandler 最近の「閲覧履歴」カテゴリからおすすめを取得
+func GetCategoryRecommendationsHandler(c *gin.Context) {
+	userID := c.GetHeader("X-User-ID")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User ID header is required"})
+		return
+	}
+
+	var lastCategoryID uint
+	// 💡 閲覧履歴(view_histories)から最新の商品カテゴリを取得
+	err := database.DBClient.Table("view_histories").
+		Select("items.category_id").
+		Joins("JOIN items ON items.id = view_histories.item_id").
+		Where("view_histories.user_id = ?", userID).
+		Order("view_histories.created_at DESC").
+		Limit(1).
+		Pluck("category_id", &lastCategoryID).Error
+
+	if err != nil || lastCategoryID == 0 {
+		c.JSON(http.StatusOK, gin.H{"items": []models.Item{}})
+		return
+	}
+
+	var items []models.Item
+	database.DBClient.
+		Where("category_id = ? AND seller_id != ? AND status = ?", lastCategoryID, userID, "ON_SALE").
+		Order("created_at DESC").Limit(10).Find(&items)
+
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+// GetRecommendedUsersHandler おすすめのアカウント（共通のカテゴリを出品している人など）
+func GetRecommendedUsersHandler(c *gin.Context) {
+	userID := c.GetHeader("X-User-ID")
+	var users []models.User
+	// 実装例: まだフォローしていない、かつ出品数が多いユーザーを推奨
+	database.DBClient.Where("id != ? AND id NOT IN (SELECT following_id FROM follows WHERE follower_id = ?)", userID, userID).
+		Order("follower_count DESC").Limit(8).Find(&users)
+	c.JSON(http.StatusOK, gin.H{"users": users})
+}
+
+// RecordViewHandler 商品の閲覧を記録
+func RecordViewHandler(c *gin.Context) {
+	userIDStr := c.GetHeader("X-User-ID")
+	userID, _ := strconv.ParseUint(userIDStr, 10, 64)
+
+	itemIDStr := c.Param("id")
+	itemID, _ := strconv.ParseUint(itemIDStr, 10, 64)
+
+	if userID == 0 || itemID == 0 {
+		c.JSON(http.StatusOK, gin.H{"status": "ignored"})
+		return
+	}
+
+	// 閲覧履歴を保存
+	history := models.ViewHistory{UserID: userID, ItemID: itemID}
+	database.DBClient.Create(&history)
+
+	c.JSON(http.StatusOK, gin.H{"status": "recorded"})
 }
