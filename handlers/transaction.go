@@ -137,7 +137,7 @@ func CancelTransactionHandler(c *gin.Context) {
 	}
 
 	// 3. ステータスを CANCELED に更新
-	if err := db.Model(&tx).Where("id = ?", txID).Update("Status", "CANCELED").Error; err != nil {
+	if err := db.Model(&models.Transaction{}).Where("id = ?", txID).Update("status", "CANCELED").Error; err != nil {
 		db.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel transaction"})
 		return
@@ -145,7 +145,7 @@ func CancelTransactionHandler(c *gin.Context) {
 
 	// 4. 💡 関連する商品（Item）のステータスもON_SALEに戻す（在庫復活）
 	db.First(&tx, txID)
-	if err := db.Model(&models.Item{}).Where("id = ?", tx.ItemID).Update("Status", "ON_SALE").Error; err != nil {
+	if err := db.Model(&models.Item{}).Where("id = ?", tx.ItemID).Update("status", "ON_SALE").Error; err != nil {
 		db.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "商品の再販設定失敗"})
 	}

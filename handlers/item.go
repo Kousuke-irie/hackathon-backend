@@ -138,7 +138,7 @@ func AnalyzeItemHandler(c *gin.Context) {
 		// (ID 16はご提示のデータで「その他」のトップレベルIDだが、ここでは子カテゴリの「ジャンル不明」IDを使うのが理想)
 		// 暫定的に、最も具体的な子カテゴリID (例: DBに存在する最大のID) か、ユーザーが設定した「その他」のIDを使用。
 		// ここでは、CategoryIDを0に設定して、フロント側で「その他」の初期値を適用させるロジックに変更します。
-		aiResult.CategoryID = 0                        // 無効なIDを0に設定
+		aiResult.CategoryID = 0                               // 無効なIDを0に設定
 		aiResult.Title = "【カテゴリ要確認】 " + aiResult.Title // タイトルにフラグを立ててユーザーに注意を促す
 		fmt.Printf("Warning: AI returned invalid Category ID. Title set to: %s\n", aiResult.Title)
 	}
@@ -150,33 +150,57 @@ func AnalyzeItemHandler(c *gin.Context) {
 	})
 }
 
-// GetItemListHandler 全ての販売中の商品を取得するAPI
 func GetItemListHandler(c *gin.Context) {
 	queryParam := c.Query("q")
+	categoryIDStr := c.Query("category_id") // フロントから渡されるカテゴリID
+	conditionName := c.Query("condition")
+	sortBy := c.Query("sort_by")
+	sortOrder := c.Query("sort_order")
+	userID := c.Query("user_id")
 
 	var items []models.Item
 	db := database.DBClient
 
-	// 自身が出品した商品を除く（スワイプと同じ条件を踏襲）
-	userID := c.Query("user_id") // フロントエンドからクエリパラメータでユーザーIDを受け取る
-
-	// 販売中で、かつ自身が出品していない商品を取得
 	query := db.Where("status = ?", "ON_SALE")
 
 	if userID != "" {
 		query = query.Where("seller_id != ?", userID)
 	}
 
-	// 2. ▼ キーワード検索 (Full-Text Search / Simple LIKE) ▼
+	// 💡 カテゴリ絞り込みの強化
+	if categoryIDStr != "" {
+		catID, _ := strconv.ParseUint(categoryIDStr, 10, 64)
+		// 子カテゴリのIDリストを取得
+		var subCategoryIDs []uint
+		database.DBClient.Model(&models.Category{}).
+			Where("id = ? OR parent_id = ?", catID, catID).
+			Pluck("id", &subCategoryIDs)
+
+		query = query.Where("category_id IN (?)", subCategoryIDs)
+	}
+
+	if conditionName != "" {
+		query = query.Where("condition = ?", conditionName)
+	}
+
 	if queryParam != "" {
 		searchQuery := fmt.Sprintf("%%%s%%", queryParam)
-		// title OR description で LIKE 検索
 		query = query.Where("title LIKE ? OR description LIKE ?", searchQuery, searchQuery)
 	}
 
-	// 最新の20件を返す（ページネーションは一旦省略）
-	if err := query.Order("created_at DESC").Limit(20).Find(&items).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch item list"})
+	// 並び替えの適用
+	order := "DESC"
+	if sortOrder == "asc" {
+		order = "ASC"
+	}
+	sortCol := "created_at"
+	if sortBy == "price" {
+		sortCol = "price"
+	}
+	query = query.Order(fmt.Sprintf("%s %s", sortCol, order))
+
+	if err := query.Preload("Seller").Limit(40).Find(&items).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch items"})
 		return
 	}
 
@@ -375,7 +399,7 @@ func GetMyPurchasesInProgressHandler(c *gin.Context) {
 	inProgressStatuses := []string{"PURCHASED", "SHIPPED", "RECEIVED"}
 
 	if err := db.
-		Preload("Item").        // 関連する商品情報を取得
+		Preload("Item"). // 関連する商品情報を取得
 		Preload("Item.Seller"). // 商品の出品者情報も取得
 		Where("buyer_id = ?", userID).
 		Where("status IN (?)", inProgressStatuses).
