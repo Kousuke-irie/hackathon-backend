@@ -96,7 +96,7 @@ func PostReviewHandler(c *gin.Context) {
 		// 2. 取引ステータスの更新
 		if err := dbTx.Model(&models.Transaction{}).
 			Where("id = ?", txID).
-			Update("status", "RECEIVED").Error; err != nil {
+			Update("status", "COMPLETED").Error; err != nil {
 			return err
 		}
 
@@ -109,7 +109,7 @@ func PostReviewHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Review posted and status updated"})
+	c.JSON(http.StatusOK, gin.H{"message": "Review posted and transaction completed"})
 }
 
 // CancelTransactionHandler 取引をキャンセル

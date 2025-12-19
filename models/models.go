@@ -46,7 +46,7 @@ type Transaction struct {
 	PriceSnapshot   int       `gorm:"not null" json:"price_snapshot"`
 	StripePaymentID string    `gorm:"type:varchar(255)" json:"stripe_payment_id"`
 	CreatedAt       time.Time `json:"created_at"`
-	Status          string    `gorm:"type:enum('PURCHASED','SHIPPED','COMPLETED','CANCELED','RECEIVED');default:'PURCHASED';not null" json:"status"`
+	Status          string    `gorm:"type:enum('PURCHASED','SHIPPED','COMPLETED','CANCELED');default:'PURCHASED';not null" json:"status"`
 
 	// Relations
 	Item  Item `gorm:"foreignKey:ItemID" json:"item,omitempty"`
